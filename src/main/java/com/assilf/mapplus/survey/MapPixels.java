@@ -119,7 +119,7 @@ public final class MapPixels {
 			for (int dz = 0; dz < samples; dz++) {
 				int x = x0 + dx * step;
 				int z = z0 + dz * step;
-				if (chunk.getPos().x != (x >> 4) || chunk.getPos().z != (z >> 4)) {
+				if (chunk.getPos().x() != (x >> 4) || chunk.getPos().z() != (z >> 4)) {
 					chunk = chunks.get(x >> 4, z >> 4);
 					if (chunk == null) {
 						return null;

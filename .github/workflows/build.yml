@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       inspect:
-        description: 'Space-separated Minecraft classes to print signatures of; Class:regex keeps only matching lines'
+        description: 'Space-separated Minecraft classes to print signatures of; Class:regex keeps only matching lines; Class#method prints that method''s bytecode'
         required: false
         default: ''
 
@@ -43,6 +43,15 @@ jobs:
           echo "$JARS" | head -40
           CP=$(echo "$JARS" | paste -sd: -)
           for spec in $CLASSES; do
+            case "$spec" in
+              *'#'*)
+                c="${spec%%#*}"
+                m="${spec#*#}"
+                echo "===== $c#$m"
+                javap -c -p -cp "$CP" "$c" | awk -v m=" $m(" 'index($0, m) && !/^ *[0-9]+:/ {p=1} p {print} p && /^$/ {p=0}' || true
+                continue
+                ;;
+            esac
             c="${spec%%:*}"
             filter="."
             if [ "$spec" != "$c" ]; then filter="${spec#*:}"; fi

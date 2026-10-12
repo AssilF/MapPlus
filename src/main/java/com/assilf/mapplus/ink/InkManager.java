@@ -142,7 +142,7 @@ public final class InkManager {
 				sendState(player, mapId, map);
 				return;
 			}
-			player.level().playSound(null, player.blockPosition(), SoundEvents.AXE_WAX_OFF, SoundSource.PLAYERS, 1.0F, 1.0F);
+			player.level().playSound(null, player.blockPosition(), SoundEvents.AXE_WAX_OFF.value(), SoundSource.PLAYERS, 1.0F, 1.0F);
 		}
 
 		layer.setSealed(seal);
