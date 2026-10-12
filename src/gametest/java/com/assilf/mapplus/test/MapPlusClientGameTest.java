@@ -111,6 +111,9 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				player.setItemInHand(InteractionHand.MAIN_HAND, atlas);
 			});
 			context.waitTicks(10);
+			// Look at the sky, so using the atlas doesn't open the table instead.
+			context.getInput().lookAt(0, -90);
+			context.waitTick();
 			context.getInput().pressKey(options -> options.keyUse);
 			context.waitForScreen(BookEditScreen.class);
 			context.waitTicks(5);
