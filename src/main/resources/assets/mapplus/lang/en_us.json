@@ -17,5 +17,18 @@
 	"mapplus.ink.glow_supply": "Glow: %s (+%s sacs)",
 	"mapplus.ink.water_supply": "Water: %s (+%s bottles)",
 	"mapplus.ink.sealed": "Sealed with wax",
-	"mapplus.ink.free": "Creative: ink is free"
+	"mapplus.ink.free": "Creative: ink is free",
+	"item.mapplus.atlas": "Atlas",
+	"mapplus.atlas.select": "Explore",
+	"mapplus.atlas.selected": "Exploring",
+	"mapplus.atlas.write": "Notes",
+	"mapplus.atlas.sketch": "Sketch",
+	"mapplus.atlas.take_out": "Take Out",
+	"mapplus.atlas.bookmark": "Ribbon",
+	"mapplus.atlas.empty": "Bind maps at a cartography table",
+	"mapplus.atlas.no_notes": "No notes",
+	"mapplus.atlas.unrolling": "Unrolling...",
+	"mapplus.atlas.exploring": "Exploring",
+	"mapplus.atlas.page": "%s / %s",
+	"mapplus.atlas.need_dye": "You need a dye for the ribbon"
 }

@@ -3,8 +3,11 @@
 	"package": "com.assilf.mapplus.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
+		"CartographyAdditionalSlotMixin",
+		"CartographyTableMenuMixin",
 		"HoldingPlayerMixin",
-		"MapItemSavedDataAccessor"
+		"MapItemSavedDataAccessor",
+		"MapItemSavedDataMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

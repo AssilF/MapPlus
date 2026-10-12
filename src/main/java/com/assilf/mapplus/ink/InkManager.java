@@ -1,6 +1,7 @@
 package com.assilf.mapplus.ink;
 
 import com.assilf.mapplus.MapPlusConfig;
+import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.mixin.MapItemSavedDataAccessor;
 import com.assilf.mapplus.net.InkSealPayload;
 import com.assilf.mapplus.net.InkStatePayload;
@@ -13,6 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.item.DyeColor;
@@ -42,17 +44,29 @@ public final class InkManager {
 
 	/**
 	 * The map the player is inking: the map in the input slot of their open
-	 * cartography table, if it matches the requested id.
+	 * cartography table, or a page of an unsigned atlas they hold.
 	 */
 	private static MapItemSavedData inkableMap(ServerPlayer player, MapId mapId) {
-		if (!(player.containerMenu instanceof CartographyTableMenu menu)) {
-			return null;
-		}
-		ItemStack stack = menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem();
-		if (!stack.is(Items.FILLED_MAP) || !mapId.equals(stack.get(DataComponents.MAP_ID))) {
+		if (!isInkable(player, mapId)) {
 			return null;
 		}
 		return player.level().getServer().overworld().getMapData(mapId);
+	}
+
+	private static boolean isInkable(ServerPlayer player, MapId mapId) {
+		if (player.containerMenu instanceof CartographyTableMenu menu) {
+			ItemStack stack = menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem();
+			if (stack.is(Items.FILLED_MAP) && mapId.equals(stack.get(DataComponents.MAP_ID))) {
+				return true;
+			}
+		}
+		for (InteractionHand hand : InteractionHand.values()) {
+			ItemStack held = player.getItemInHand(hand);
+			if (Atlas.isEditable(held) && Atlas.read(held).map(atlas -> atlas.contains(mapId)).orElse(false)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static void handleOpen(ServerPlayer player, MapId mapId) {

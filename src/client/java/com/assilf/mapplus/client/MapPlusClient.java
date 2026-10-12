@@ -1,5 +1,7 @@
 package com.assilf.mapplus.client;
 
+import com.assilf.mapplus.atlas.Atlas;
+import com.assilf.mapplus.client.atlas.AtlasScreen;
 import com.assilf.mapplus.client.ink.InkScreen;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.OpenInkPayload;
@@ -7,11 +9,13 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.CartographyTableScreen;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -27,6 +31,15 @@ public class MapPlusClient implements ClientModInitializer {
 			if (context.client().gui.screen() instanceof InkScreen screen && screen.mapId() == payload.mapId()) {
 				screen.accept(payload);
 			}
+		});
+
+		// Right-clicking an atlas opens it; the server skips the vanilla book screen.
+		UseItemCallback.EVENT.register((player, level, hand) -> {
+			if (level.isClientSide() && Atlas.isAtlas(player.getItemInHand(hand))) {
+				Minecraft.getInstance().gui.setScreen(new AtlasScreen(hand));
+				return InteractionResult.SUCCESS;
+			}
+			return InteractionResult.PASS;
 		});
 
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {

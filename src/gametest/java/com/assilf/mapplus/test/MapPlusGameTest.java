@@ -1,5 +1,6 @@
 package com.assilf.mapplus.test;
 
+import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
@@ -14,7 +15,10 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.CartographyTableMenu;
+import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MapItem;
 import net.minecraft.world.level.GameType;
@@ -111,6 +115,60 @@ public class MapPlusGameTest {
 		int color = MapPixels.color(level, MapPixels.ChunkLookup.loaded(level), map, px, pz, Double.NaN);
 		helper.assertTrue(color >= 0, Component.literal("Chunk should be loaded"));
 		helper.assertValueEqual(MapColor.byId(color >> 2), MapColor.LAPIS, Component.literal("surveyed color"));
+		helper.succeed();
+	}
+
+	private static ItemStack mapItem(MapId mapId) {
+		ItemStack stack = new ItemStack(Items.FILLED_MAP);
+		stack.set(DataComponents.MAP_ID, mapId);
+		return stack;
+	}
+
+	/** A map and a book and quill in a cartography table make an atlas; more maps can be added. */
+	@GameTest
+	public void bindingMakesAnAtlas(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+		MapId first = newMap(level, origin);
+		MapId second = newMap(level, origin.offset(512, 0, 0));
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = new CartographyTableMenu(1, player.getInventory(), ContainerLevelAccess.create(level, origin));
+
+		helper.assertTrue(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).mayPlace(new ItemStack(Items.WRITABLE_BOOK)),
+				Component.literal("Book and quill should fit in the second slot"));
+
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(first));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.WRITABLE_BOOK));
+		ItemStack atlasStack = menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().copy();
+		Atlas atlas = Atlas.read(atlasStack).orElseThrow(() -> helper.assertionException(Component.literal("Result should be an atlas")));
+		helper.assertValueEqual(atlas.plates().size(), 1, Component.literal("pages after first bind"));
+		helper.assertTrue(atlas.contains(first), Component.literal("Atlas should contain the first map"));
+
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(second));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(atlasStack);
+		Atlas bigger = Atlas.read(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem())
+				.orElseThrow(() -> helper.assertionException(Component.literal("Second result should be an atlas")));
+		helper.assertValueEqual(bigger.plates().size(), 2, Component.literal("pages after second bind"));
+		helper.assertTrue(bigger.contains(second), Component.literal("Atlas should contain the second map"));
+
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(first));
+		helper.assertTrue(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().isEmpty(),
+				Component.literal("A map already in the atlas can't be bound again"));
+		helper.succeed();
+	}
+
+	/** Atlas data survives a write and read through the item's custom data. */
+	@GameTest
+	public void atlasDataRoundTrips(GameTestHelper helper) {
+		ItemStack stack = new ItemStack(Items.WRITABLE_BOOK);
+		Atlas atlas = Atlas.of(new MapId(7), false)
+				.withPlate(new Atlas.Plate(9, true))
+				.withSelected(1)
+				.withBookmark(1, DyeColor.LIME);
+		atlas.write(stack);
+		Atlas read = Atlas.read(stack).orElseThrow(() -> helper.assertionException(Component.literal("Atlas should read back")));
+		helper.assertValueEqual(read, atlas, Component.literal("atlas data"));
+		helper.assertFalse(Atlas.isAtlas(new ItemStack(Items.WRITABLE_BOOK)), Component.literal("A plain book is not an atlas"));
 		helper.succeed();
 	}
 }

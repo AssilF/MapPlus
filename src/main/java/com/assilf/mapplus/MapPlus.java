@@ -1,8 +1,10 @@
 package com.assilf.mapplus;
 
+import com.assilf.mapplus.atlas.AtlasManager;
 import com.assilf.mapplus.ink.CauldronWashing;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkSupply;
+import com.assilf.mapplus.net.AtlasActionPayload;
 import com.assilf.mapplus.net.InkSealPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
@@ -26,11 +28,13 @@ public class MapPlus implements ModInitializer {
 		PayloadTypeRegistry.serverboundPlay().register(OpenInkPayload.TYPE, OpenInkPayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(InkStrokePayload.TYPE, InkStrokePayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(InkSealPayload.TYPE, InkSealPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(AtlasActionPayload.TYPE, AtlasActionPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
 
 		InkManager.register();
 		CauldronWashing.register();
 		SpyglassSurvey.register();
+		AtlasManager.register();
 	}
 
 	public static Identifier id(String path) {
