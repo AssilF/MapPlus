@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       inspect:
-        description: 'Space-separated Minecraft classes to print signatures of; Class:regex keeps only matching lines; Class#method prints that method''s bytecode'
+        description: 'Space-separated Minecraft classes to print signatures of; Class:regex keeps only matching lines; Class#method prints that method''s bytecode; @regex lists matching jar files (with PNG sizes); %regex prints them as base64'
         required: false
         default: ''
 
@@ -44,6 +44,23 @@ jobs:
           CP=$(echo "$JARS" | paste -sd: -)
           for spec in $CLASSES; do
             case "$spec" in
+              '@'*|'%'*)
+                pat="${spec#?}"
+                echo "===== assets $spec"
+                for j in $JARS; do
+                  unzip -Z1 "$j" 2>/dev/null | grep -E "$pat" | while read -r e; do
+                    if [ "${spec:0:1}" = "%" ]; then
+                      echo "--- $e"
+                      unzip -p "$j" "$e" | base64 -w0
+                      echo
+                    else
+                      dims=$(unzip -p "$j" "$e" | head -c 24 | python3 -c 'import sys,struct;d=sys.stdin.buffer.read();print(struct.unpack(">II",d[16:24]) if d[:4]==b"\x89PNG" else "")')
+                      echo "$e $dims"
+                    fi
+                  done
+                done
+                continue
+                ;;
               *'#'*)
                 c="${spec%%#*}"
                 m="${spec#*#}"
