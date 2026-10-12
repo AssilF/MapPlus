@@ -46,9 +46,21 @@ What removal leaves behind:
 ### Ink
 
 - Materials: ink sac (black), the 16 dyes (colors), glow ink sac (glowing ink).
-- Drawing uses ink: an ink item loaded into the inkwell gives a fixed amount of
-  ink (configurable). Leftover ink is kept on the player as a Fabric attachment,
-  which vanilla drops silently if the mod is removed.
+- Drawing uses ink in proportion to what is drawn. One ink item loaded into the
+  inkwell gives 256 ink (configurable). Costs:
+  - Pixel layer: 1 ink per pixel painted.
+  - Lines, arrows and shape outlines: 1 ink per pixel of length.
+  - Zone fills: the outline cost plus a small flat fee, not the area, so large
+    zones stay affordable.
+  - Text labels: 1 ink per character.
+  - Glow ink sac: makes strokes glow, at the same rate.
+- Leftover ink is kept on the player as a Fabric attachment, which vanilla drops
+  silently if the mod is removed.
+- **Eraser:** a water bottle, matching vanilla's cauldron washing of dye. One
+  bottle erases 256 pixels and leaves a glass bottle. Dipping a map into a water
+  cauldron clears all its ink and uses one cauldron level.
+- **Sealing:** honeycomb seals a map's or sketch's ink against edits, like waxing
+  a sign. An axe scrapes the seal off, like scraping wax off copper.
 - Two layers per surface:
   - **Pixel layer:** 128×128, 16 dye colors plus a glow flag.
   - **Vector layer:** lines, arrows, rectangles, polygons, text labels, pins.
@@ -97,9 +109,14 @@ and its page order in `custom_data`.
 
 ### In-world projection
 
-While wearing a helmet with the projection enchantment, zones and blueprint
-footprints from atlases and maps in the player's inventory show as ghost
-outlines in the world. Client rendering only; nothing is placed in the world.
+While wearing a helmet enchanted with **Foresight**, zones and blueprint
+footprints show as ghost outlines in the world. They come from either:
+
+- a map held in the main hand or offhand, or
+- an atlas held in hand, using its selected map page (stored in the atlas's
+  `custom_data`).
+
+Client rendering only; nothing is placed in the world.
 
 ### The enchantment and vanilla players
 
@@ -107,8 +124,9 @@ outlines in the world. Client rendering only; nothing is placed in the world.
   clients at login like vanilla's own enchantments, so vanilla players can still
   join, and can enchant, trade and wear it. Its name uses a translatable text
   with an English fallback, so vanilla clients show a readable name.
-- Where it can be obtained is controlled by vanilla enchantment tags (treasure,
-  tradeable, random loot); see open questions.
+- Name: **Foresight**. Helmets only, one level.
+- Proposed: a treasure enchantment (not offered by the enchanting table), found
+  in loot chests and sold by librarians. Controlled by vanilla enchantment tags.
 - Vanilla players can't render the projection client-side. Optional server
   fallback: packet-only block display entities (glowing outlines) sent to vanilla
   players wearing the helmet. They are never added to the world or saved, and
@@ -173,15 +191,16 @@ Fabric split client/common source sets plus the Fabric API.
 - A map is consumed when bound into an atlas.
 - Drawing uses ink and dyes.
 - Client-only mode comes later.
-- In-world projection requires an enchanted helmet.
+- In-world projection requires a helmet enchanted with Foresight, and the map
+  (or the atlas, on a selected map page) in hand.
+- Ink cost is proportional to what is drawn.
+- Water erases; honeycomb seals; an axe removes the seal.
 
 ## Open questions
 
-- Enchantment name, and how it's obtained (enchanting table, librarian trades,
-  treasure only).
-- Does projection need the atlas held, or anywhere in the inventory?
-- How much ink one item gives.
-- Eraser: free, or does it need an item?
+- Is Foresight a treasure enchantment (loot and librarians only), or also from
+  the enchanting table?
+- Exact ink amounts after playtesting.
 
 ## To verify on 26.3
 
