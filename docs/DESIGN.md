@@ -43,35 +43,39 @@ What removal leaves behind:
 
 ## Features
 
-### Ink
+### The cartography table is the drawing desk
 
-- Materials: ink sac (black), the 16 dyes (colors), glow ink sac (glowing ink).
-- Drawing uses ink in proportion to what is drawn. One ink item loaded into the
-  inkwell gives 256 ink (configurable). Costs:
-  - Pixel layer: 1 ink per pixel painted.
-  - Lines, arrows and shape outlines: 1 ink per pixel of length.
-  - Zone fills: the outline cost plus a small flat fee, not the area, so large
-    zones stay affordable.
-  - Text labels: 1 ink per character.
-  - Glow ink sac: makes strokes glow, at the same rate.
-- Leftover ink is kept on the player as a Fabric attachment, which vanilla drops
-  silently if the mod is removed.
-- **Eraser:** a water bottle, matching vanilla's cauldron washing of dye. One
-  bottle erases 256 pixels and leaves a glass bottle. Dipping a map into a water
-  cauldron clears all its ink and uses one cauldron level.
-- **Sealing:** honeycomb seals a map's or sketch's ink against edits, like waxing
-  a sign. An axe scrapes the seal off, like scraping wax off copper.
-- Two layers per surface:
-  - **Pixel layer:** 128×128, 16 dye colors plus a glow flag.
-  - **Vector layer:** lines, arrows, rectangles, polygons, text labels, pins.
-- Surfaces: a map (keyed by map id) or a sketch page (keyed by sketch id).
-- Ink on a map is shared by every copy of that map id, like vanilla map content.
+Players with the mod get the vanilla cartography table window with a drawing
+wing attached on its right, in the same vanilla window style. Players without
+the mod get the plain vanilla table.
 
-### Cartography table
+- **Canvas:** with a map in the top slot, the wing shows it at full size and
+  you draw on it directly. An **empty map** in the top slot is a blank canvas;
+  the drawing appears in the result slot, and taking it uses one empty map.
+- **The second slot is the material.** What you put there decides what the
+  mouse does on the canvas:
 
-- Vanilla functions (zoom, clone, lock) unchanged.
-- **Ink tab:** draw on a map.
-- **Bind:** add maps to an atlas.
+  | Second slot | Effect |
+  |---|---|
+  | Dye | Draw in that color |
+  | Ink sac | Draw in black |
+  | Glow ink sac | Brush over ink to make it glow, like glow ink on a sign |
+  | Water bottle | Erase; the bottle becomes a glass bottle when used up |
+  | Honeycomb | Result: the same map, sealed against edits |
+  | Axe | Result: the same map, seal scraped off (the axe takes damage) |
+  | Book and quill / atlas | Result: the map bound into an atlas |
+  | Paper / empty map / glass pane | Vanilla: zoom out, copy, lock |
+
+- **Ink is used up from that slot:** one dye, ink sac, glow ink sac or water
+  bottle covers 256 pixels. A bar in the wing shows what is left of the
+  current item.
+- **Tools:** pen, line, box and fill, as slot-style buttons with item icons
+  under the canvas. Scroll over the canvas to change the brush size (1-3).
+- **Performance:** the canvas is the map's own texture, drawn the way vanilla
+  draws maps in item frames. Only the stroke being drawn is overlaid.
+- Ink is still never written into the map's own colors; it is drawn into the
+  map data sent to players, so vanilla clients see it too.
+- Dipping a map into a water cauldron still washes all its ink off.
 
 ### Atlas
 
@@ -79,23 +83,24 @@ An atlas is a vanilla book and quill (later a written book) carrying an atlas id
 and its page order in `custom_data`.
 
 - **Making one:** book and quill + map in the cartography table. The map item is
-  consumed; the atlas references its map id.
-- **Pages:**
-  - Text pages: stored in the vanilla `writable_book_content` /
-    `written_book_content` component, so they survive removal.
-  - Map pages: a bound map, with its ink, zones and pins.
-  - Sketch pages: a blank page drawn on with the same ink mechanism.
-- **Adding pages:** maps through the cartography table; text and sketch pages in
-  the atlas screen.
+  consumed; the atlas keeps the whole item (markers, name, color) and its id.
+- **Looks like a book:** it opens as a vanilla open book. Each spread has the
+  notes page on the left and the map on the right.
+- **Notes:** the book's own text pages (vanilla `writable_book_content` /
+  `written_book_content`), written with the vanilla book editor, so they survive
+  if the mod is removed. Notes stay paired with their map page.
+- **Drawing:** with a material (dye, ink sac, glow ink sac, water bottle) in the
+  other hand, draw directly on the open page, with the same tools as the table.
+- **Sketch pages:** blank pages to draw on freely, using one paper each. They
+  belong to the book and can't be taken out.
+- **Taking out:** a bound map can be taken back out as the original map item.
 - **Signing:** like a book and quill. Becomes a written book with vanilla title,
-  author and generation. Map and sketch pages become read-only.
+  author and generation. Pages become read-only.
 - **Copying:** vanilla book cloning (written atlas + book and quill), with the
-  same generation limits. Copies reference the same map ids and sketches; this
-  is safe because signed atlases are read-only.
+  same generation limits.
 - **Bookmarks:** dye-colored ribbons on any page.
-- **Table of contents:** built from zone and pin names.
-- **Overview:** all map pages stitched together.
-- **Lectern:** works like a book; players with the mod see the full atlas.
+- **Later:** table of contents from zone and pin names; stitched overview;
+  lectern view.
 
 ### Planning
 
@@ -196,7 +201,7 @@ Fabric split client/common source sets plus the Fabric API.
 ## Build order
 
 1. Project setup, data model, storage, networking
-2. Ink on maps at the cartography table (with ink cost); rendering on held and framed maps
+2. Ink on maps at the cartography table (drawing desk, material slot, empty-map canvas); rendering on held and framed maps
 3. Spyglass survey: map filling from the spyglass
 4. Atlas: binding maps, text pages, sketch pages, signing, copying, lectern
 5. Zones, pins, labels, bookmarks, table of contents
@@ -265,7 +270,9 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - In-world projection requires a helmet enchanted with Foresight, and the map
   (or the atlas, on a selected map page) in hand.
 - Ink cost is proportional to what is drawn.
-- Water erases; honeycomb seals; an axe removes the seal.
+- Water erases; honeycomb seals; an axe removes the seal. All of these go in
+  the cartography table's second slot.
+- The cartography table itself is the drawing UI; there is no separate screen.
 - Foresight is treasure-only.
 - v1 spyglass: map surveying only. Far view, zoom control and spyglass
   enchantments come later.
