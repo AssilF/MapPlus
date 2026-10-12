@@ -31,6 +31,8 @@ public class MapPlusGameTest {
 	}
 
 	private static MapItemSavedData.MapPatch firstPatch(GameTestHelper helper, MapItemSavedData map, MapId mapId, Player player) {
+		// Vanilla registers players as holders while they carry or see the map.
+		map.getHoldingPlayer(player);
 		Packet<?> packet = map.getUpdatePacket(mapId, player);
 		if (!(packet instanceof ClientboundMapItemDataPacket mapPacket) || mapPacket.colorPatch().isEmpty()) {
 			throw helper.assertionException(Component.literal("Expected a map packet with colors"));
