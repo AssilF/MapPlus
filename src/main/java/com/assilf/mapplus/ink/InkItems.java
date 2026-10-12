@@ -1,8 +1,6 @@
 package com.assilf.mapplus.ink;
 
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -17,15 +15,8 @@ public final class InkItems {
 	private InkItems() {
 	}
 
-	private static final Item[] DYES = new Item[DyeColor.values().length];
-
 	public static Item dyeItem(DyeColor dye) {
-		Item item = DYES[dye.getId()];
-		if (item == null) {
-			item = BuiltInRegistries.ITEM.getValue(Identifier.withDefaultNamespace(dye.getName() + "_dye"));
-			DYES[dye.getId()] = item;
-		}
-		return item;
+		return Items.DYE.pick(dye);
 	}
 
 	/** Whether the stack can be used up for ink of this color. Ink sacs count as black. */
