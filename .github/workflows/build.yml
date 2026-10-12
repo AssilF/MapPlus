@@ -1,0 +1,48 @@
+# Builds the mod on every push. The jar is attached to each run as an artifact.
+# Running it manually with "inspect" set prints the signatures of the listed
+# Minecraft classes, to check vanilla names while developing.
+
+name: build
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      inspect:
+        description: 'Space-separated Minecraft classes to print signatures of'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+      - name: build
+        run: ./gradlew build --stacktrace
+      - name: capture build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MapPlus
+          path: build/libs/
+      - name: inspect minecraft classes
+        if: ${{ always() && inputs.inspect != '' }}
+        env:
+          CLASSES: ${{ inputs.inspect }}
+        run: |
+          JARS=$(find ~/.gradle .gradle -name '*.jar' \( -path '*minecraft*' -o -path '*loom*' \) 2>/dev/null | grep -v sources | sort -u)
+          echo "$JARS" | head -40
+          CP=$(echo "$JARS" | paste -sd: -)
+          for c in $CLASSES; do
+            echo "===== $c"
+            javap -p -cp "$CP" "$c" || true
+          done

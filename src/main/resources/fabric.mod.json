@@ -10,7 +10,7 @@
 	"contact": {
 		"sources": "https://github.com/AssilF/MapPlus"
 	},
-	"license": "All-Rights-Reserved",
+	"license": "MIT",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
