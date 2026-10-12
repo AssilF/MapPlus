@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       inspect:
-        description: 'Space-separated Minecraft classes to print signatures of'
+        description: 'Space-separated Minecraft classes to print signatures of; Class:regex keeps only matching lines'
         required: false
         default: ''
 
@@ -42,7 +42,10 @@ jobs:
           JARS=$(find ~/.gradle .gradle -name '*.jar' \( -path '*minecraft*' -o -path '*loom*' \) 2>/dev/null | grep -v sources | sort -u)
           echo "$JARS" | head -40
           CP=$(echo "$JARS" | paste -sd: -)
-          for c in $CLASSES; do
-            echo "===== $c"
-            javap -p -cp "$CP" "$c" || true
+          for spec in $CLASSES; do
+            c="${spec%%:*}"
+            filter="."
+            if [ "$spec" != "$c" ]; then filter="${spec#*:}"; fi
+            echo "===== $c ($filter)"
+            javap -p -cp "$CP" "$c" | grep -E "$filter|class |interface |record " || true
           done
