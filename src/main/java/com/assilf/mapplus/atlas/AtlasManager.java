@@ -154,7 +154,7 @@ public final class AtlasManager {
 				}
 				DyeColor color = DyeColor.byId(payload.arg());
 				if (!player.isCreative() && !consumeOne(player.getInventory(), s -> s.is(Items.DYE.pick(color)))) {
-					player.displayClientMessage(Component.translatable("mapplus.atlas.need_dye"), true);
+					player.sendOverlayMessage(Component.translatable("mapplus.atlas.need_dye"));
 					return;
 				}
 				atlas.withBookmark(page, color).write(stack);
