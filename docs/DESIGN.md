@@ -147,6 +147,22 @@ In server-only mode, for clients without the mod:
   sketch pages).
 - Projection uses the display entity fallback above.
 
+### Spyglass survey
+
+While looking through a spyglass:
+
+- **Far view:** the server sends chunks beyond the normal view distance, but
+  only in a narrow cone along the line of sight, so you actually see distant
+  terrain instead of a magnified image. Range and cone width are configurable
+  and rate-limited. Needs the mod on the client; vanilla clients see the
+  vanilla spyglass.
+- **Surveying:** with a map in the other hand, the map fills in from what you
+  see, using vanilla's own map coloring and height shading. Only the part of the
+  view inside the map's area fills in, and it fills progressively as you scan.
+  This runs on the server, so it also works for vanilla clients.
+- Far chunks are loaded read-only and are never ticked: no mobs, redstone or
+  crops run in them.
+
 ### Server
 
 - Storage, sync, per-atlas permissions (owner, editors, viewers), undo history.
@@ -181,10 +197,22 @@ Fabric split client/common source sets plus the Fabric API.
 
 1. Project setup, data model, storage, networking
 2. Ink on maps at the cartography table (with ink cost); rendering on held and framed maps
-3. Atlas: binding maps, text pages, sketch pages, signing, copying, lectern
-4. Zones, pins, labels, bookmarks, table of contents
-5. Enchantment and in-world projection; vanilla client fallbacks
-6. Client-only mode, PNG export, uninstall command
+3. Spyglass survey: map filling from the spyglass, then far view
+4. Atlas: binding maps, text pages, sketch pages, signing, copying, lectern
+5. Zones, pins, labels, bookmarks, table of contents
+6. Enchantment and in-world projection; vanilla client fallbacks
+7. Client-only mode, PNG export, uninstall command
+
+## Future versions
+
+- **Territory and nations:** banner-based identity, claimed and held borders,
+  charters. Being designed.
+- **Spyglass upgrades:** zoom control (scroll while scoping) and treasure
+  enchantments for more zoom range, revealing entities (per-player glowing,
+  which vanilla clients can see too) and revealing structures (outlined bounds).
+- **Depth and cave mapping:** maps that record a chosen Y layer instead of the
+  surface, filled by exploring underground; cross-section and contour pages in
+  the atlas; possibly an echo shard "ping" that sketches nearby caves.
 
 ## Decisions
 
@@ -196,10 +224,14 @@ Fabric split client/common source sets plus the Fabric API.
 - Ink cost is proportional to what is drawn.
 - Water erases; honeycomb seals; an axe removes the seal.
 - Foresight is treasure-only.
+- v1 spyglass: far view and map surveying only; zoom control and spyglass
+  enchantments come later.
 
 ## Open questions
 
 - Exact ink amounts after playtesting.
+- Can the spyglass generate new chunks, or only show chunks that already exist?
+- Spyglass far-view range.
 
 ## To verify on 26.3
 
