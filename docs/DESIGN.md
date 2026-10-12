@@ -125,8 +125,8 @@ Client rendering only; nothing is placed in the world.
   join, and can enchant, trade and wear it. Its name uses a translatable text
   with an English fallback, so vanilla clients show a readable name.
 - Name: **Foresight**. Helmets only, one level.
-- Proposed: a treasure enchantment (not offered by the enchanting table), found
-  in loot chests and sold by librarians. Controlled by vanilla enchantment tags.
+- Treasure-only, like Mending: never offered by the enchanting table, found in
+  loot chests and sold by librarians. Controlled by vanilla enchantment tags.
 - Vanilla players can't render the projection client-side. Optional server
   fallback: packet-only block display entities (glowing outlines) sent to vanilla
   players wearing the helmet. They are never added to the world or saved, and
@@ -195,11 +195,10 @@ Fabric split client/common source sets plus the Fabric API.
   (or the atlas, on a selected map page) in hand.
 - Ink cost is proportional to what is drawn.
 - Water erases; honeycomb seals; an axe removes the seal.
+- Foresight is treasure-only.
 
 ## Open questions
 
-- Is Foresight a treasure enchantment (loot and librarians only), or also from
-  the enchanting table?
 - Exact ink amounts after playtesting.
 
 ## To verify on 26.3
