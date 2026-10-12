@@ -57,3 +57,13 @@ jar {
 		rename { "${it}_${archivesName}" }
 	}
 }
+
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "mapplus-test"
+		enableGameTests = true
+		enableClientGameTests = false
+		eula = true
+	}
+}
