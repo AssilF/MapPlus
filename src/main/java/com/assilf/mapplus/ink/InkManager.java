@@ -18,6 +18,7 @@ import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
@@ -271,7 +272,7 @@ public final class InkManager {
 			}
 			ItemStack bottle = new ItemStack(Items.GLASS_BOTTLE);
 			if (!inventory.add(bottle)) {
-				player.drop(bottle, false);
+				Block.popResource(player.level(), player.blockPosition(), bottle);
 			}
 			return true;
 		}
