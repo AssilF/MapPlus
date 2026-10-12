@@ -149,23 +149,19 @@ In server-only mode, for clients without the mod:
 
 ### Spyglass survey
 
-While looking through a spyglass:
+While looking through a spyglass with a map in the other hand:
 
-- **Far view:** the server sends chunks beyond the normal view distance, but
-  only in a narrow cone along the line of sight, so you actually see distant
-  terrain instead of a magnified image. Range (default 2× the server view
-  distance) and cone width are configurable and rate-limited. Needs the mod on
-  the client; vanilla clients see the vanilla spyglass.
-- **Chunk generation:** looking at land nobody has visited generates those
+- **Surveying:** the map fills in from what you see, using vanilla's own map
+  coloring and height shading, out to 2× the server view distance
+  (configurable). Only the part of the view inside the map's area fills in, and
+  it fills progressively as you scan. This runs on the server, so it also works
+  for vanilla clients.
+- **Chunk loading:** chunks the survey needs are loaded in the background, a
+  few per tick, and are never ticked: no mobs, redstone or crops run in them.
+- **Chunk generation:** surveying land nobody has visited generates those
   chunks, rate-limited and capped. On by default; a server setting turns it off
-  so only existing chunks are shown. This is the one feature that can leave
+  so only existing chunks are used. This is the one feature that can leave
   something behind after removal: normal vanilla terrain, as exploring would.
-- **Surveying:** with a map in the other hand, the map fills in from what you
-  see, using vanilla's own map coloring and height shading. Only the part of the
-  view inside the map's area fills in, and it fills progressively as you scan.
-  This runs on the server, so it also works for vanilla clients.
-- Far chunks are loaded read-only and are never ticked: no mobs, redstone or
-  crops run in them.
 
 ### Server
 
@@ -201,7 +197,7 @@ Fabric split client/common source sets plus the Fabric API.
 
 1. Project setup, data model, storage, networking
 2. Ink on maps at the cartography table (with ink cost); rendering on held and framed maps
-3. Spyglass survey: map filling from the spyglass, then far view
+3. Spyglass survey: map filling from the spyglass
 4. Atlas: binding maps, text pages, sketch pages, signing, copying, lectern
 5. Zones, pins, labels, bookmarks, table of contents
 6. Enchantment and in-world projection; vanilla client fallbacks
@@ -234,6 +230,12 @@ enforced.
 
 ### Spyglass upgrades
 
+- **Far view:** see past the render distance while scoping. Planned as a mix
+  of two approaches: real chunks streamed along the line of sight just past the
+  render distance (the client widens its chunk storage and render distance
+  while scoping, which costs a short hitch), and a cheap map-style preview
+  (heights and map colors only) further out.
+
 - Zoom control: scroll while scoping.
 - Treasure enchantments: more range; revealing entities (per-player glowing,
   which vanilla clients can see too); revealing structures (outlined bounds).
@@ -265,7 +267,7 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - Ink cost is proportional to what is drawn.
 - Water erases; honeycomb seals; an axe removes the seal.
 - Foresight is treasure-only.
-- v1 spyglass: far view and map surveying only; zoom control and spyglass
+- v1 spyglass: map surveying only. Far view, zoom control and spyglass
   enchantments come later.
 - Spyglass chunk generation: on by default, server setting to turn it off.
 - Territory is visual only (future version); the political view is its own
