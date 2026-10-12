@@ -1,0 +1,21 @@
+{
+	"mapplus.ink.button": "Ink",
+	"mapplus.ink.title": "Ink",
+	"mapplus.ink.loading": "Unrolling the map...",
+	"mapplus.ink.tool.pen": "Pen",
+	"mapplus.ink.tool.line": "Line",
+	"mapplus.ink.tool.box": "Box",
+	"mapplus.ink.tool.filled_box": "Filled Box",
+	"mapplus.ink.tool.bucket": "Fill",
+	"mapplus.ink.tool.eraser": "Eraser",
+	"mapplus.ink.brush": "Brush: %s",
+	"mapplus.ink.glow.on": "Glow Ink: On",
+	"mapplus.ink.glow.off": "Glow Ink: Off",
+	"mapplus.ink.seal": "Seal (Honeycomb)",
+	"mapplus.ink.unseal": "Scrape (Axe)",
+	"mapplus.ink.supply": "Ink: %s (+%s items)",
+	"mapplus.ink.glow_supply": "Glow: %s (+%s sacs)",
+	"mapplus.ink.water_supply": "Water: %s (+%s bottles)",
+	"mapplus.ink.sealed": "Sealed with wax",
+	"mapplus.ink.free": "Creative: ink is free"
+}
