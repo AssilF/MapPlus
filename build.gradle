@@ -63,7 +63,12 @@ fabricApi {
 		createSourceSet = true
 		modId = "mapplus-test"
 		enableGameTests = true
-		enableClientGameTests = false
+		enableClientGameTests = true
 		eula = true
 	}
+}
+
+// Client game tests run headless in CI, where Fabric's network synchronizer can stall.
+loom.runs.matching { it.name == "clientGameTest" }.configureEach {
+	vmArg "-Dfabric.client.gametest.disableNetworkSynchronizer=true"
 }

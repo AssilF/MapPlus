@@ -4,37 +4,52 @@ import com.assilf.mapplus.atlas.AtlasManager;
 import com.assilf.mapplus.ink.CauldronWashing;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkSupply;
-import com.assilf.mapplus.net.AtlasActionPayload;
-import com.assilf.mapplus.net.InkSealPayload;
+import com.assilf.mapplus.net.AtlasPagePayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
-import com.assilf.mapplus.net.OpenInkPayload;
 import com.assilf.mapplus.survey.SpyglassSurvey;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.function.BooleanSupplier;
 
 public class MapPlus implements ModInitializer {
 	public static final String MOD_ID = "mapplus";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
+	/** Whether the server the client plays on has the mod. Set by the client initializer. */
+	public static BooleanSupplier serverHasMod = () -> false;
 
 	@Override
 	public void onInitialize() {
 		MapPlusConfig.load();
 		InkSupply.init();
 
-		PayloadTypeRegistry.serverboundPlay().register(OpenInkPayload.TYPE, OpenInkPayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(InkStrokePayload.TYPE, InkStrokePayload.CODEC);
-		PayloadTypeRegistry.serverboundPlay().register(InkSealPayload.TYPE, InkSealPayload.CODEC);
-		PayloadTypeRegistry.serverboundPlay().register(AtlasActionPayload.TYPE, AtlasActionPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(AtlasPagePayload.TYPE, AtlasPagePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
 
 		InkManager.register();
 		CauldronWashing.register();
 		SpyglassSurvey.register();
 		AtlasManager.register();
+	}
+
+	/**
+	 * Whether both sides of this player's connection have the mod. Only then does
+	 * the cartography table draw; everyone else gets the vanilla table.
+	 */
+	public static boolean hasMod(Player player) {
+		if (player instanceof ServerPlayer serverPlayer) {
+			return serverPlayer.connection != null && ServerPlayNetworking.canSend(serverPlayer, InkStatePayload.TYPE);
+		}
+		return player.level().isClientSide() && serverHasMod.getAsBoolean();
 	}
 
 	public static Identifier id(String path) {

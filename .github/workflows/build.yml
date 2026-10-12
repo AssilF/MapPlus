@@ -34,6 +34,19 @@ jobs:
         with:
           name: MapPlus
           path: build/libs/
+      - name: client game tests
+        if: ${{ inputs.inspect == '' }}
+        run: |
+          sudo apt-get install -y -qq xvfb > /dev/null
+          xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew runClientGameTest --stacktrace
+      - name: print screenshots
+        if: ${{ always() && inputs.inspect == '' }}
+        run: |
+          find build/run -name '*.png' -path '*screenshots*' | sort | while read -r f; do
+            echo "--- $f"
+            base64 -w0 "$f"
+            echo
+          done
       - name: inspect minecraft classes
         if: ${{ always() && inputs.inspect != '' }}
         env:

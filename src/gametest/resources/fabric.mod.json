@@ -7,6 +7,9 @@
 	"entrypoints": {
 		"fabric-gametest": [
 			"com.assilf.mapplus.test.MapPlusGameTest"
+		],
+		"fabric-client-gametest": [
+			"com.assilf.mapplus.test.MapPlusClientGameTest"
 		]
 	}
 }

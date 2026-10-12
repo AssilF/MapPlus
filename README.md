@@ -4,29 +4,26 @@ A Fabric mod for Minecraft 26.3 that extends vanilla cartography for planning bu
 
 ## Features
 
-### Ink on maps
-Put a filled map in a cartography table and press **Ink**.
+### Drawing at the cartography table
+With the mod on both sides, the cartography table window gets a drawing desk on its right: the map in the top slot, at full size, to draw on directly.
 
-- Tools: pen, line, box, filled box, fill and eraser, with brush sizes 1–3. Right-click erases.
-- Ink comes from dyes (ink sacs count as black): one item draws 256 pixels. Glow ink sacs make glowing ink.
-- Erasing uses water bottles: one bottle erases 256 pixels and gives back a glass bottle.
-- **Seal** with honeycomb to protect a map's ink; **scrape** the seal off with an axe.
+- **What draws is what's in the second slot:** a dye draws in its color (an ink sac draws black), a glow ink sac makes ink glow, a water bottle erases. One item covers 256 pixels; the bar on the item shows what's left of it.
+- **Empty map:** put an empty map in the top slot to draw on a blank canvas. The drawing is the result; taking it uses up one empty map.
+- **Tools:** pen, line, box and fill, under the map. Scroll over the map, or use the buttons on the right, to change the brush size (1 to 3).
+- **Seal:** honeycomb in the second slot seals a map's ink against drawing and washing; an axe scrapes the seal off (and takes damage).
+- Shift-click dyes, ink sacs, water bottles, honeycomb, axes and books into the second slot.
 - Use a map on a water cauldron to wash all its ink off.
 - Every copy of a map shows the same ink, including maps in item frames, and players without the mod see it too.
 
 ### Atlas
-Put a filled map in a cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with that map as its first page. Bind more maps the same way, with the atlas in the second slot. The maps are used up.
+Put a filled map in the cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with the map stitched in as its next page. Stitch more maps the same way, with the atlas in the second slot. The maps are used up and can't be taken back out.
 
-Right-click the atlas to open it. Each spread shows a page of notes on the left and a map on the right.
+The atlas opens in the vanilla book and quill screen. Each stitched map shows on the page facing its notes, on the left or the right depending on where it was stitched: a map stitched after a left page faces it from the right; otherwise it starts a new spread on the left, with an empty page for notes on the right.
 
-- **Explore:** the selected map keeps filling in as you walk while you hold the atlas, like a held map.
-- **Ink:** draw on the page with the usual ink tools.
-- **Notes:** write in the book with the vanilla book editor. Sign it like any book to make the atlas read-only; signed atlases can be copied like written books.
-- **Sketch:** add a blank page to draw on, using one paper.
-- **Take Out:** take a map page back out as a filled map.
-- **Ribbon:** mark a page with a dye ribbon (uses one dye); click a ribbon to jump to its page.
+- **Notes:** write as in any book. Sign it to make it read-only; signed atlases can be copied like written books and read on lecterns.
+- **Explore:** held, the atlas keeps filling in the map of the spread it was last closed on, like a held map.
 
-Removing the mod leaves the atlas as an ordinary book with its notes.
+Removing the mod leaves the atlas as an ordinary book: notes intact, map pages showing the map's name.
 
 ### Spyglass survey
 Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too.

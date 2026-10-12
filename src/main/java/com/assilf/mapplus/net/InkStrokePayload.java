@@ -2,54 +2,74 @@ package com.assilf.mapplus.net;
 
 import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.ink.Ink;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import io.netty.handler.codec.DecoderException;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
+import java.util.Arrays;
+import java.util.BitSet;
+
 /**
- * Client draws or erases a set of pixels.
+ * Client applies the material in its cartography table's second slot to some
+ * pixels of the map in the first slot.
  *
- * @param dye  dye id to draw with, or {@link #ERASE}
- * @param mask one bit per map pixel, row by row
+ * @param seq    numbers the strokes; the server acknowledges each in {@link InkStatePayload}
+ * @param mapId  the map the client is drawing on, or {@link #NEW_CANVAS} for an
+ *               empty map that has no drawing yet
+ * @param shape  whether the stroke must be drawn whole or not at all (lines,
+ *               boxes, fills); pen strokes are drawn until the ink runs out
+ * @param pixels the pixels to apply the material to, row by row
  */
-public record InkStrokePayload(int mapId, int dye, boolean glow, byte[] mask) implements CustomPacketPayload {
-	public static final int ERASE = -1;
-	public static final int MASK_BYTES = Ink.PIXELS / 8;
+public record InkStrokePayload(int seq, int mapId, boolean shape, BitSet pixels) implements CustomPacketPayload {
+	public static final int NEW_CANVAS = -1;
+	private static final int MASK_BYTES = Ink.PIXELS / 8;
 
 	public static final Type<InkStrokePayload> TYPE = new Type<>(MapPlus.id("ink_stroke"));
-	public static final StreamCodec<RegistryFriendlyByteBuf, InkStrokePayload> CODEC = StreamCodec.ofMember(
+	public static final StreamCodec<FriendlyByteBuf, InkStrokePayload> CODEC = StreamCodec.ofMember(
 			InkStrokePayload::write,
 			InkStrokePayload::read
 	);
 
-	private static InkStrokePayload read(RegistryFriendlyByteBuf buf) {
+	private static InkStrokePayload read(FriendlyByteBuf buf) {
+		int seq = buf.readVarInt();
 		int mapId = buf.readVarInt();
-		int dye = buf.readVarInt();
-		boolean glow = buf.readBoolean();
-		byte[] mask = buf.readByteArray(MASK_BYTES);
-		if (mask.length != MASK_BYTES) {
-			mask = java.util.Arrays.copyOf(mask, MASK_BYTES);
+		boolean shape = buf.readBoolean();
+		BitSet pixels;
+		if (buf.readBoolean()) {
+			byte[] mask = new byte[MASK_BYTES];
+			buf.readBytes(mask);
+			pixels = BitSet.valueOf(mask);
+		} else {
+			int count = buf.readVarInt();
+			if (count < 0 || count > Ink.PIXELS) {
+				throw new DecoderException("Too many pixels: " + count);
+			}
+			pixels = new BitSet(Ink.PIXELS);
+			for (int i = 0; i < count; i++) {
+				pixels.set(buf.readUnsignedShort() % Ink.PIXELS);
+			}
 		}
-		return new InkStrokePayload(mapId, dye, glow, mask);
+		return new InkStrokePayload(seq, mapId, shape, pixels);
 	}
 
-	private void write(RegistryFriendlyByteBuf buf) {
+	// Small strokes go as a list of pixels, large ones as a bit per pixel.
+	private void write(FriendlyByteBuf buf) {
+		buf.writeVarInt(seq);
 		buf.writeVarInt(mapId);
-		buf.writeVarInt(dye);
-		buf.writeBoolean(glow);
-		buf.writeByteArray(mask);
-	}
-
-	public boolean isSet(int index) {
-		return isSet(mask, index);
-	}
-
-	public static boolean isSet(byte[] mask, int index) {
-		return (mask[index >> 3] & (1 << (index & 7))) != 0;
-	}
-
-	public static void set(byte[] mask, int index) {
-		mask[index >> 3] |= (byte) (1 << (index & 7));
+		buf.writeBoolean(shape);
+		BitSet clipped = pixels.get(0, Ink.PIXELS);
+		int count = clipped.cardinality();
+		boolean mask = count * 2 >= MASK_BYTES;
+		buf.writeBoolean(mask);
+		if (mask) {
+			buf.writeBytes(Arrays.copyOf(clipped.toByteArray(), MASK_BYTES));
+		} else {
+			buf.writeVarInt(count);
+			for (int i = clipped.nextSetBit(0); i >= 0; i = clipped.nextSetBit(i + 1)) {
+				buf.writeShort(i);
+			}
+		}
 	}
 
 	@Override

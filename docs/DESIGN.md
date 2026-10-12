@@ -5,8 +5,8 @@ Status: draft. Target: Minecraft 26.3, Fabric.
 ## Goal
 
 Tools for planning builds, structures and projects in Minecraft, through an
-extended vanilla cartography: drawing on maps, atlases (map books) with writing,
-sketches, zones and bookmarks, and an in-world projection of plans. It should
+extended vanilla cartography: drawing on maps, atlases (map books) with notes,
+zones and pins, and an in-world projection of plans. It should
 feel like vanilla.
 
 ## Core principle: removable
@@ -28,8 +28,8 @@ What removal leaves behind:
 | Thing | After removal |
 |---|---|
 | Maps | Unchanged vanilla maps |
-| Atlases | Vanilla book and quill / written book with their text pages intact; map and sketch pages are not shown |
-| Maps bound into an atlas | Their `map_N.dat` stays in the world, but no item points to it any more |
+| Atlases | Vanilla book and quill / written book with their text pages intact; map pages show the map's name |
+| Maps stitched into an atlas | Their `map_N.dat` stays in the world, but no item points to it any more |
 | Enchanted helmets | See [The enchantment](#the-enchantment-and-vanilla-players) |
 | `world/data/mapplus/` | Orphaned and ignored |
 
@@ -63,7 +63,7 @@ the mod get the plain vanilla table.
   | Water bottle | Erase; the bottle becomes a glass bottle when used up |
   | Honeycomb | Result: the same map, sealed against edits |
   | Axe | Result: the same map, seal scraped off (the axe takes damage) |
-  | Book and quill / atlas | Result: the map bound into an atlas |
+  | Book and quill / atlas | Result: the map stitched into the book as its next page |
   | Paper / empty map / glass pane | Vanilla: zoom out, copy, lock |
 
 - **Ink is used up from that slot:** one dye, ink sac, glow ink sac or water
@@ -79,28 +79,32 @@ the mod get the plain vanilla table.
 
 ### Atlas
 
-An atlas is a vanilla book and quill (later a written book) carrying an atlas id
-and its page order in `custom_data`.
+An atlas is a vanilla book and quill (or, signed, a written book) with maps
+stitched in as pages. It opens in the vanilla book screens; nothing about
+writing, signing or copying changes.
 
-- **Making one:** book and quill + map in the cartography table. The map item is
-  consumed; the atlas keeps the whole item (markers, name, color) and its id.
-- **Looks like a book:** it opens as a vanilla open book. Each spread has the
-  notes page on the left and the map on the right.
-- **Notes:** the book's own text pages (vanilla `writable_book_content` /
-  `written_book_content`), written with the vanilla book editor, so they survive
-  if the mod is removed. Notes stay paired with their map page.
-- **Drawing:** with a material (dye, ink sac, glow ink sac, water bottle) in the
-  other hand, draw directly on the open page, with the same tools as the table.
-- **Sketch pages:** blank pages to draw on freely, using one paper each. They
-  belong to the book and can't be taken out.
-- **Taking out:** a bound map can be taken back out as the original map item.
-- **Signing:** like a book and quill. Becomes a written book with vanilla title,
-  author and generation. Pages become read-only.
-- **Copying:** vanilla book cloning (written atlas + book and quill), with the
-  same generation limits.
-- **Bookmarks:** dye-colored ribbons on any page.
-- **Later:** table of contents from zone and pin names; stitched overview;
-  lectern view.
+- **Stitching:** map + book and quill in the cartography table's second slot.
+  The map item is used up (its markers, name and color are kept in the atlas)
+  and becomes the book's next page. The cartography table is the only place
+  this happens; maps can't be taken back out.
+- **Spreads:** pages pair up as in an open book. A map page is shown facing the
+  other page of its spread, which holds its notes:
+  - if the book ends on a left page, the map goes on the right, facing it;
+  - otherwise the map starts a new spread on the left, with an empty notes
+    page on the right.
+- **Reading:** the vanilla page is shown as usual, with the map page drawn
+  beside it on its side of the spread. Turning pages steps over map pages,
+  since each is always shown with its notes. Signed atlases and atlases on a
+  lectern read the same way.
+- **Notes:** ordinary book pages, written with the vanilla editor. A map page
+  also carries the map's name as text, which is what players without the mod
+  (or after removal) see.
+- **Exploring:** a held atlas explores with the map of the spread it was last
+  closed on, as if that map were held. Closing it on a spread without a map
+  stops that.
+- No drawing, sketching or map making inside the atlas: that's the cartography
+  table's job.
+- **Later:** table of contents from zone and pin names; stitched overview.
 
 ### Planning
 
@@ -148,8 +152,7 @@ In server-only mode, for clients without the mod:
 
 - Map ink is merged into the colors in the map packet (the saved map is untouched).
 - Pins are sent as vanilla map decorations in the map packet.
-- Atlases appear as plain books (later: packet-only placeholder pages for map and
-  sketch pages).
+- Atlases appear as plain books; map pages show the map's name.
 - Projection uses the display entity fallback above.
 
 ### Spyglass survey
@@ -181,8 +184,7 @@ While looking through a spyglass with a map in the other hand:
 ## Data layout
 
 - `world/data/mapplus/maps/<id>.dat`: ink pixels, vector shapes, zones, pins for map `<id>`.
-- `world/data/mapplus/atlases/<uuid>.dat`: sketch pages, bookmarks, permissions.
-- Atlas item `custom_data`: atlas id and page order (text / map id / sketch id).
+- Atlas item `custom_data`: which pages hold which map, and the map that explores.
 - Every file carries a MapPlus data version for later migrations.
 
 ## Project layout
@@ -203,7 +205,7 @@ Fabric split client/common source sets plus the Fabric API.
 1. Project setup, data model, storage, networking
 2. Ink on maps at the cartography table (drawing desk, material slot, empty-map canvas); rendering on held and framed maps
 3. Spyglass survey: map filling from the spyglass
-4. Atlas: binding maps, text pages, sketch pages, signing, copying, lectern
+4. Atlas: stitching maps, map spreads in the vanilla book screens, signing, copying, lectern
 5. Zones, pins, labels, bookmarks, table of contents
 6. Enchantment and in-world projection; vanilla client fallbacks
 7. Client-only mode, PNG export, uninstall command
@@ -264,7 +266,7 @@ original leads". Kept out of the main mod; may become a parallel variant.
 
 ## Decisions
 
-- A map is consumed when bound into an atlas.
+- A map is consumed when stitched into an atlas, and can't be taken out.
 - Drawing uses ink and dyes.
 - Client-only mode comes later.
 - In-world projection requires a helmet enchanted with Foresight, and the map

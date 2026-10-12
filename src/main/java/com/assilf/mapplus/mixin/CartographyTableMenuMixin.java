@@ -1,20 +1,25 @@
 package com.assilf.mapplus.mixin;
 
+import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.atlas.Atlas;
-import com.assilf.mapplus.net.InkStatePayload;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.core.HolderLookup;
+import com.assilf.mapplus.ink.DeskSlot;
+import com.assilf.mapplus.ink.DrawingDesk;
+import com.assilf.mapplus.ink.InkData;
+import com.assilf.mapplus.ink.InkMaterial;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.ResultContainer;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,16 +28,20 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import java.util.Optional;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Binding maps into atlases: a filled map plus a book and quill (or an atlas)
- * gives an atlas with that map as a new page. Taking the result uses up both
- * inputs, as with any cartography table result.
+ * The cartography table as a drawing desk, for players who have the mod:
+ * <ul>
+ * <li>an empty map in the first slot is a blank canvas; the drawing on it is the result</li>
+ * <li>a map plus a book and quill (or an atlas) stitches the map into the book</li>
+ * <li>a map plus honeycomb seals its ink; a map plus an axe scrapes the seal off</li>
+ * <li>shift-clicking dyes, ink sacs, water bottles, honeycomb, axes and books puts them in the second slot</li>
+ * </ul>
+ * Players without the mod get the vanilla table.
  */
 @Mixin(CartographyTableMenu.class)
-public abstract class CartographyTableMenuMixin {
+public abstract class CartographyTableMenuMixin extends AbstractContainerMenu implements DrawingDesk {
 	@Shadow
 	@Final
 	private ContainerLevelAccess access;
@@ -41,53 +50,122 @@ public abstract class CartographyTableMenuMixin {
 	@Final
 	private ResultContainer resultContainer;
 
-	@Unique
-	private Player mapplus$player;
+	@Shadow
+	@Final
+	public Container container;
 
-	@Inject(method = "<init>(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/inventory/ContainerLevelAccess;)V", at = @At("TAIL"))
-	private void mapplus$rememberPlayer(int containerId, Inventory inventory, ContainerLevelAccess access, CallbackInfo ci) {
-		mapplus$player = inventory.player;
+	@Unique
+	private boolean mapplus$desk;
+
+	@Unique
+	private MapId mapplus$canvas;
+
+	protected CartographyTableMenuMixin(MenuType<?> type, int containerId) {
+		super(type, containerId);
 	}
 
-	@Inject(method = "setupResultSlot", at = @At("HEAD"), cancellable = true)
-	private void mapplus$bindIntoAtlas(ItemStack map, ItemStack additional, ItemStack result, CallbackInfo ci) {
-		if (!additional.is(Items.WRITABLE_BOOK)) {
+	@Inject(method = "<init>(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/inventory/ContainerLevelAccess;)V", at = @At("TAIL"))
+	private void mapplus$init(int containerId, Inventory inventory, ContainerLevelAccess levelAccess, CallbackInfo ci) {
+		mapplus$desk = MapPlus.hasMod(inventory.player);
+		((DeskSlot) slots.get(CartographyTableMenu.MAP_SLOT)).mapplus$setDesk(this);
+		((DeskSlot) slots.get(CartographyTableMenu.ADDITIONAL_SLOT)).mapplus$setDesk(this);
+	}
+
+	@Override
+	public boolean mapplus$isDesk() {
+		return mapplus$desk;
+	}
+
+	@Override
+	public void mapplus$setDesk(boolean desk) {
+		mapplus$desk = desk;
+	}
+
+	@Override
+	public MapId mapplus$canvas() {
+		return mapplus$canvas;
+	}
+
+	@Override
+	public void mapplus$setCanvas(MapId canvas) {
+		mapplus$canvas = canvas;
+		slotsChanged(container);
+	}
+
+	/** With an empty map in the first slot, the result is the drawing on it, whatever the second slot holds. */
+	@Inject(method = "slotsChanged", at = @At("HEAD"), cancellable = true)
+	private void mapplus$showCanvas(Container changed, CallbackInfo ci) {
+		if (!mapplus$desk || !container.getItem(CartographyTableMenu.MAP_SLOT).is(Items.MAP)) {
 			return;
 		}
 		ci.cancel();
-		// Atlases need the mod to open; don't let players without it lock maps away.
-		if (mapplus$player instanceof ServerPlayer serverPlayer && !ServerPlayNetworking.canSend(serverPlayer, InkStatePayload.TYPE)) {
-			return;
-		}
+		// Runs on the server only; the client shows the result the server sends.
 		access.execute((level, pos) -> {
-			ItemStack atlasStack = bind(map, additional, level.registryAccess());
-			if (!ItemStack.matches(atlasStack, result)) {
-				resultContainer.setItem(CartographyTableMenu.RESULT_SLOT, atlasStack);
-				((AbstractContainerMenu) (Object) this).broadcastChanges();
+			ItemStack drawing = mapplus$canvas == null ? ItemStack.EMPTY : DrawingDesk.canvasItem(mapplus$canvas);
+			if (!ItemStack.matches(drawing, resultContainer.getItem(CartographyTableMenu.RESULT_SLOT))) {
+				resultContainer.setItem(CartographyTableMenu.RESULT_SLOT, drawing);
+				broadcastChanges();
 			}
 		});
 	}
 
-	private static ItemStack bind(ItemStack map, ItemStack book, HolderLookup.Provider registries) {
+	@Inject(method = "setupResultSlot", at = @At("HEAD"), cancellable = true)
+	private void mapplus$deskResults(ItemStack map, ItemStack additional, ItemStack result, CallbackInfo ci) {
+		boolean book = additional.is(Items.WRITABLE_BOOK);
+		boolean seal = additional.is(Items.HONEYCOMB) || additional.is(ItemTags.AXES);
+		if (!book && !seal) {
+			return;
+		}
+		ci.cancel();
+		if (!mapplus$desk) {
+			return;
+		}
+		access.execute((level, pos) -> {
+			ItemStack out = book ? Atlas.stitch(additional, map, level.registryAccess()) : sealResult(level, map, additional);
+			if (!ItemStack.matches(out, result)) {
+				resultContainer.setItem(CartographyTableMenu.RESULT_SLOT, out);
+				broadcastChanges();
+			}
+		});
+	}
+
+	/** Honeycomb seals a map's ink and an axe scrapes the seal off; the result is the same map. */
+	@Unique
+	private static ItemStack sealResult(Level level, ItemStack map, ItemStack tool) {
 		MapId mapId = map.get(DataComponents.MAP_ID);
-		if (mapId == null || !map.is(Items.FILLED_MAP)) {
+		if (mapId == null || !map.is(Items.FILLED_MAP) || level.getServer() == null) {
 			return ItemStack.EMPTY;
 		}
-		Optional<Atlas> existing = Atlas.read(book);
-		if (existing.isPresent()) {
-			Atlas atlas = existing.get();
-			if (atlas.contains(mapId) || atlas.plates().size() >= Atlas.MAX_PLATES) {
-				return ItemStack.EMPTY;
-			}
-			ItemStack out = book.copyWithCount(1);
-			atlas.withPlate(Atlas.Plate.bound(map, registries)).write(out);
-			return out;
+		boolean sealed = InkData.get(level.getServer()).isSealed(mapId);
+		boolean sealing = tool.is(Items.HONEYCOMB);
+		return sealed != sealing ? map.copyWithCount(1) : ItemStack.EMPTY;
+	}
+
+	@Inject(method = "quickMoveStack", at = @At("HEAD"), cancellable = true)
+	private void mapplus$quickMoveToDesk(Player player, int index, CallbackInfoReturnable<ItemStack> cir) {
+		if (!mapplus$desk || index <= CartographyTableMenu.RESULT_SLOT) {
+			return;
 		}
-		ItemStack out = book.copyWithCount(1);
-		Atlas.of(Atlas.Plate.bound(map, registries)).write(out);
-		if (!out.has(DataComponents.CUSTOM_NAME)) {
-			out.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("item.mapplus.atlas", "Atlas"));
+		Slot slot = slots.get(index);
+		ItemStack stack = slot.getItem();
+		if (stack.isEmpty() || !(stack.is(Items.WRITABLE_BOOK) || InkMaterial.fitsTable(stack))) {
+			return;
 		}
-		return out;
+		ItemStack copy = stack.copy();
+		if (!moveItemStackTo(stack, CartographyTableMenu.ADDITIONAL_SLOT, CartographyTableMenu.ADDITIONAL_SLOT + 1, false)) {
+			cir.setReturnValue(ItemStack.EMPTY);
+			return;
+		}
+		if (stack.isEmpty()) {
+			slot.setByPlayer(ItemStack.EMPTY);
+		}
+		slot.setChanged();
+		if (stack.getCount() == copy.getCount()) {
+			cir.setReturnValue(ItemStack.EMPTY);
+			return;
+		}
+		slot.onTake(player, stack);
+		broadcastChanges();
+		cir.setReturnValue(copy);
 	}
 }

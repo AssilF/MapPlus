@@ -1,62 +1,36 @@
 package com.assilf.mapplus.net;
 
 import com.assilf.mapplus.MapPlus;
-import com.assilf.mapplus.ink.Ink;
-import com.assilf.mapplus.ink.InkSupply;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 /**
- * Server tells the client the current state of a map being inked.
+ * Server tells a player at a cartography table what their drawing desk needs
+ * to show. Sent when something in it changes.
  *
- * @param open   whether the client may keep editing (false closes the ink screen)
- * @param colors the map's own colors, without ink
- * @param ink    the ink layer
+ * @param ack      the last stroke the server has applied; its pixels are in the map now
+ * @param canvasId the map holding the drawing on the empty map in the first slot, or -1
+ * @param sealed   whether the map in the first slot is sealed against drawing
+ * @param charge   ink of the second slot's material the player has loaded but not used
+ * @param perItem  pixels one item of that material covers
+ * @param free     whether drawing costs nothing (creative)
  */
-public record InkStatePayload(int mapId, boolean open, boolean sealed, byte[] colors, byte[] ink, InkSupply supply)
+public record InkStatePayload(int ack, int canvasId, boolean sealed, int charge, int perItem, boolean free)
 		implements CustomPacketPayload {
+	public static final InkStatePayload NONE = new InkStatePayload(0, -1, false, 0, 1, false);
+
 	public static final Type<InkStatePayload> TYPE = new Type<>(MapPlus.id("ink_state"));
-	public static final StreamCodec<RegistryFriendlyByteBuf, InkStatePayload> CODEC = StreamCodec.ofMember(
-			InkStatePayload::write,
-			InkStatePayload::read
+	public static final StreamCodec<FriendlyByteBuf, InkStatePayload> CODEC = StreamCodec.composite(
+			ByteBufCodecs.VAR_INT, InkStatePayload::ack,
+			ByteBufCodecs.VAR_INT, InkStatePayload::canvasId,
+			ByteBufCodecs.BOOL, InkStatePayload::sealed,
+			ByteBufCodecs.VAR_INT, InkStatePayload::charge,
+			ByteBufCodecs.VAR_INT, InkStatePayload::perItem,
+			ByteBufCodecs.BOOL, InkStatePayload::free,
+			InkStatePayload::new
 	);
-
-	public static InkStatePayload closed(int mapId) {
-		return new InkStatePayload(mapId, false, false, new byte[Ink.PIXELS], new byte[Ink.PIXELS], InkSupply.EMPTY);
-	}
-
-	private static InkStatePayload read(RegistryFriendlyByteBuf buf) {
-		int mapId = buf.readVarInt();
-		boolean open = buf.readBoolean();
-		boolean sealed = buf.readBoolean();
-		byte[] colors = fit(buf.readByteArray(Ink.PIXELS));
-		byte[] ink = fit(buf.readByteArray(Ink.PIXELS));
-		int[] dyes = new int[InkSupply.DYES];
-		for (int i = 0; i < dyes.length; i++) {
-			dyes[i] = buf.readVarInt();
-		}
-		int glow = buf.readVarInt();
-		int water = buf.readVarInt();
-		return new InkStatePayload(mapId, open, sealed, colors, ink, new InkSupply(dyes, glow, water));
-	}
-
-	private void write(RegistryFriendlyByteBuf buf) {
-		buf.writeVarInt(mapId);
-		buf.writeBoolean(open);
-		buf.writeBoolean(sealed);
-		buf.writeByteArray(colors);
-		buf.writeByteArray(ink);
-		for (int amount : supply.dyes()) {
-			buf.writeVarInt(amount);
-		}
-		buf.writeVarInt(supply.glow());
-		buf.writeVarInt(supply.water());
-	}
-
-	private static byte[] fit(byte[] bytes) {
-		return bytes.length == Ink.PIXELS ? bytes : java.util.Arrays.copyOf(bytes, Ink.PIXELS);
-	}
 
 	@Override
 	public Type<? extends CustomPacketPayload> type() {

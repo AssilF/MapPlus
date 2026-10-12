@@ -1,74 +1,81 @@
 package com.assilf.mapplus.client;
 
-import com.assilf.mapplus.atlas.Atlas;
-import com.assilf.mapplus.client.atlas.AtlasScreen;
-import com.assilf.mapplus.client.ink.InkScreen;
+import com.assilf.mapplus.MapPlus;
+import com.assilf.mapplus.client.atlas.AtlasBookScreen;
+import com.assilf.mapplus.client.desk.DeskState;
+import com.assilf.mapplus.client.desk.DeskWing;
+import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.ink.DrawingDesk;
+import com.assilf.mapplus.net.AtlasPagePayload;
 import com.assilf.mapplus.net.InkStatePayload;
-import com.assilf.mapplus.net.OpenInkPayload;
+import com.assilf.mapplus.net.InkStrokePayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
-import net.fabricmc.fabric.api.client.screen.v1.Screens;
-import net.fabricmc.fabric.api.event.player.UseItemCallback;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.CartographyTableScreen;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.inventory.CartographyTableMenu;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.saveddata.maps.MapId;
+import net.minecraft.world.InteractionHand;
+
+import java.util.Map;
+import java.util.WeakHashMap;
 
 public class MapPlusClient implements ClientModInitializer {
-	private static final int TABLE_WIDTH = 176;
-	private static final int TABLE_HEIGHT = 166;
+	/** The drawing desk of each open cartography table, kept across window resizes. */
+	private static final Map<Screen, DeskWing> WINGS = new WeakHashMap<>();
 
 	@Override
 	public void onInitializeClient() {
+		MapPlus.serverHasMod = () -> ClientPlayNetworking.canSend(InkStrokePayload.TYPE);
+
 		ClientPlayNetworking.registerGlobalReceiver(InkStatePayload.TYPE, (payload, context) -> {
-			if (context.client().gui.screen() instanceof InkScreen screen && screen.mapId() == payload.mapId()) {
-				screen.accept(payload);
+			DeskState.accept(payload);
+			if (context.client().gui.screen() instanceof CartographyTableScreen table && WINGS.get(table) != null) {
+				WINGS.get(table).acknowledge(payload.ack());
 			}
 		});
 
-		// Right-clicking an atlas opens it. FAIL stops the use here, so no use
-		// packet goes to the server and no vanilla book screen opens.
-		UseItemCallback.EVENT.register((player, level, hand) -> {
-			if (level.isClientSide() && Atlas.isAtlas(player.getItemInHand(hand))) {
-				Minecraft.getInstance().gui.setScreen(new AtlasScreen(hand));
-				return InteractionResult.FAIL;
+		// The table window widens for the drawing desk before vanilla lays it out.
+		ScreenEvents.BEFORE_INIT.register((client, screen, width, height) -> {
+			if (screen instanceof CartographyTableScreen table) {
+				boolean desk = DrawingDesk.of(table.getMenu()).mapplus$isDesk();
+				((AbstractContainerScreenAccessor) table).mapplus$setImageWidth(desk ? DeskWing.WIDTH : DeskWing.VANILLA_WIDTH);
 			}
-			return InteractionResult.PASS;
 		});
 
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
-			if (screen instanceof CartographyTableScreen table) {
-				addInkButton(client, table, width, height);
+			if (screen instanceof CartographyTableScreen table && DrawingDesk.of(table.getMenu()).mapplus$isDesk()) {
+				attachDesk(table);
+			}
+			if (screen instanceof AtlasBookScreen book) {
+				ScreenEvents.remove(screen).register(closed -> leftOpen(book));
 			}
 		});
 	}
 
-	private static void addInkButton(Minecraft client, CartographyTableScreen table, int width, int height) {
-		int left = (width - TABLE_WIDTH) / 2;
-		int top = (height - TABLE_HEIGHT) / 2;
-		Button button = Button.builder(Component.translatable("mapplus.ink.button"), b -> {
-			MapId mapId = inputMap(table);
-			if (mapId != null) {
-				ClientPlayNetworking.send(new OpenInkPayload(mapId.id()));
-				client.gui.setScreen(new InkScreen(table, mapId.id()));
-			}
-		}).bounds(left + TABLE_WIDTH + 4, top + 4, 40, 20).build();
-		button.active = inputMap(table) != null;
-		Screens.getWidgets(table).add(button);
-
-		ScreenEvents.afterTick(table).register(screen -> button.active = inputMap(table) != null);
+	private static void attachDesk(CartographyTableScreen table) {
+		DeskWing wing = WINGS.get(table);
+		if (wing == null) {
+			wing = new DeskWing(table);
+			WINGS.put(table, wing);
+			DeskState.reset();
+		}
+		DeskWing desk = wing;
+		ScreenEvents.afterBackground(table).register((screen, graphics, mouseX, mouseY, delta) -> desk.extractBackground(graphics, mouseX, mouseY));
+		ScreenEvents.afterForeground(table).register((screen, graphics, mouseX, mouseY, delta) -> desk.extractForeground(graphics, mouseX, mouseY));
+		ScreenEvents.afterTick(table).register(screen -> desk.tick());
+		ScreenMouseEvents.allowMouseClick(table).register((screen, event) -> !desk.mouseClicked(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseDrag(table).register((screen, event, dx, dy) -> !desk.mouseDragged(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseRelease(table).register((screen, event) -> !desk.mouseReleased(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseScroll(table).register((screen, mouseX, mouseY, horizontal, vertical) -> !desk.mouseScrolled(mouseX, mouseY, vertical));
+		ScreenEvents.remove(table).register(screen -> desk.close());
 	}
 
-	private static MapId inputMap(CartographyTableScreen table) {
-		CartographyTableMenu menu = table.getMenu();
-		ItemStack stack = menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem();
-		return stack.is(Items.FILLED_MAP) ? stack.get(DataComponents.MAP_ID) : null;
+	/** A held atlas explores with the map it was closed on. */
+	private static void leftOpen(AtlasBookScreen book) {
+		InteractionHand hand = book.mapplus$atlasHand();
+		if (hand != null && ClientPlayNetworking.canSend(AtlasPagePayload.TYPE)) {
+			ClientPlayNetworking.send(new AtlasPagePayload(hand == InteractionHand.OFF_HAND, book.mapplus$atlasPage()));
+		}
 	}
 }

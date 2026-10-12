@@ -8,9 +8,9 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.network.Filterable;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -23,48 +23,47 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * An atlas is a vanilla book and quill (or, once signed, a written book) whose
- * {@code custom_data} lists the maps bound into it. Its notes are the book's
- * own pages, so they survive if the mod is removed.
+ * An atlas is a vanilla book and quill (or, once signed, a written book) with
+ * maps stitched in as pages. The book's {@code custom_data} says which pages
+ * hold which map; the pages themselves stay ordinary book pages, so the notes
+ * survive if the mod is removed.
  *
- * @param plates    the map pages, in order
- * @param selected  the map page that explores and projects while the atlas is held
- * @param bookmarks dye ribbons marking map pages
+ * <p>Pages come in spreads, as in an open book: pages 0 and 1, 2 and 3, and so
+ * on. A map page faces the other page of its spread, where its notes go.
+ *
+ * @param plates   the stitched maps
+ * @param selected the map page that explores while the atlas is held, or -1
  */
-public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) {
+public record Atlas(List<Plate> plates, int selected) {
 	public static final String KEY = "mapplus:atlas";
-	public static final int MAX_PLATES = 64;
-	private static final int VERSION = 1;
+	private static final int VERSION = 2;
+	public static final Atlas EMPTY = new Atlas(List.of(), -1);
 
 	/**
-	 * One map page.
+	 * One stitched map.
 	 *
-	 * @param sketch whether this is a blank sketch page rather than a bound map
-	 * @param item   the map item as it was when bound, so markers, names and
-	 *               colors that live on the item come back when it is taken out
+	 * @param page the book page the map is on
+	 * @param item the map item as it was when stitched, so explorer and treasure
+	 *             markers that live on the item keep showing
 	 */
-	public record Plate(int mapId, boolean sketch, Optional<CompoundTag> item) {
+	public record Plate(int mapId, int page, Optional<CompoundTag> item) {
 		public static final Codec<Plate> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 				Codec.INT.fieldOf("map").forGetter(Plate::mapId),
-				Codec.BOOL.optionalFieldOf("sketch", false).forGetter(Plate::sketch),
+				Codec.INT.optionalFieldOf("page", -1).forGetter(Plate::page),
 				CustomData.COMPOUND_TAG_CODEC.optionalFieldOf("item").forGetter(Plate::item)
 		).apply(instance, Plate::new));
 
 		private static final Map<CompoundTag, ItemStack> DECODED = new MapMaker().weakKeys().makeMap();
 
-		public Plate(int mapId, boolean sketch) {
-			this(mapId, sketch, Optional.empty());
-		}
-
 		/** A page for a map item, keeping the whole item. */
-		public static Plate bound(ItemStack map, HolderLookup.Provider registries) {
+		public static Plate bound(ItemStack map, int page, HolderLookup.Provider registries) {
 			MapId id = map.get(DataComponents.MAP_ID);
 			Optional<CompoundTag> item = ItemStack.CODEC
 					.encodeStart(RegistryOps.create(NbtOps.INSTANCE, registries), map.copyWithCount(1))
 					.result()
 					.filter(CompoundTag.class::isInstance)
 					.map(CompoundTag.class::cast);
-			return new Plate(id == null ? 0 : id.id(), false, item);
+			return new Plate(id == null ? 0 : id.id(), page, item);
 		}
 
 		public MapId id() {
@@ -72,7 +71,7 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		}
 
 		/**
-		 * The map item for this page: the item as bound, or a plain filled map.
+		 * The map item for this page: the item as stitched, or a plain filled map.
 		 * The returned stack is shared; copy it before handing it out.
 		 */
 		public ItemStack mapStack(HolderLookup.Provider registries) {
@@ -88,24 +87,14 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		}
 	}
 
-	public record Bookmark(int page, DyeColor color) {
-		public static final Codec<Bookmark> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-				Codec.INT.fieldOf("page").forGetter(Bookmark::page),
-				DyeColor.CODEC.fieldOf("color").forGetter(Bookmark::color)
-		).apply(instance, Bookmark::new));
-	}
-
 	public static final Codec<Atlas> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 			Codec.INT.optionalFieldOf("version", VERSION).forGetter(atlas -> VERSION),
-			Plate.CODEC.listOf().optionalFieldOf("pages", List.of()).forGetter(Atlas::plates),
-			Codec.INT.optionalFieldOf("selected", 0).forGetter(Atlas::selected),
-			Bookmark.CODEC.listOf().optionalFieldOf("bookmarks", List.of()).forGetter(Atlas::bookmarks)
-	).apply(instance, (version, plates, selected, bookmarks) -> new Atlas(plates, selected, bookmarks)));
+			Plate.CODEC.listOf().optionalFieldOf("maps", List.of()).forGetter(Atlas::plates),
+			Codec.INT.optionalFieldOf("selected", -1).forGetter(Atlas::selected)
+	).apply(instance, (version, plates, selected) -> new Atlas(plates, selected)));
 
 	public Atlas {
 		plates = List.copyOf(plates);
-		bookmarks = List.copyOf(bookmarks);
-		selected = plates.isEmpty() ? 0 : Math.max(0, Math.min(selected, plates.size() - 1));
 	}
 
 	public static boolean isBook(ItemStack stack) {
@@ -138,14 +127,14 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		return read(stack).isPresent();
 	}
 
-	/** Whether the atlas can still be changed: signed atlases are read-only. */
-	public static boolean isEditable(ItemStack stack) {
-		return stack.is(Items.WRITABLE_BOOK) && isAtlas(stack);
-	}
-
 	public void write(ItemStack stack) {
 		Tag tag = CODEC.encodeStart(NbtOps.INSTANCE, this).getOrThrow();
 		CustomData.update(DataComponents.CUSTOM_DATA, stack, root -> root.put(KEY, tag));
+	}
+
+	/** The other page of the spread a page is in. */
+	public static int partner(int page) {
+		return page ^ 1;
 	}
 
 	public boolean contains(MapId mapId) {
@@ -157,68 +146,87 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		return false;
 	}
 
-	public Optional<Plate> selectedPlate() {
-		return plates.isEmpty() ? Optional.empty() : Optional.of(plates.get(selected));
-	}
-
-	public Atlas withPlate(Plate plate) {
-		List<Plate> copy = new ArrayList<>(plates);
-		copy.add(plate);
-		return new Atlas(copy, plates.isEmpty() ? 0 : selected, bookmarks);
-	}
-
-	public Atlas withoutPlate(int page) {
-		List<Plate> copy = new ArrayList<>(plates);
-		copy.remove(page);
-		List<Bookmark> marks = new ArrayList<>();
-		for (Bookmark mark : bookmarks) {
-			if (mark.page() < page) {
-				marks.add(mark);
-			} else if (mark.page() > page) {
-				marks.add(new Bookmark(mark.page() - 1, mark.color()));
+	/** The map on a page, or null if the page is a text page. */
+	public Plate plateAt(int page) {
+		for (Plate plate : plates) {
+			if (plate.page() == page) {
+				return plate;
 			}
 		}
-		int newSelected = selected > page ? selected - 1 : selected;
-		return new Atlas(copy, newSelected, marks);
+		return null;
+	}
+
+	public boolean isMapPage(int page) {
+		return page >= 0 && plateAt(page) != null;
+	}
+
+	/** The map shown in the spread of a page: on the page itself, or facing it. */
+	public Plate mapInSpread(int page) {
+		Plate here = plateAt(page);
+		return here != null ? here : plateAt(partner(page));
+	}
+
+	public Optional<Plate> selectedPlate() {
+		return selected < 0 ? Optional.empty() : Optional.ofNullable(plateAt(selected));
 	}
 
 	public Atlas withSelected(int page) {
-		return new Atlas(plates, page, bookmarks);
+		return new Atlas(plates, page);
 	}
 
-	/** Sets the ribbon on a page, or removes it when color is null. */
-	public Atlas withBookmark(int page, DyeColor color) {
-		List<Bookmark> marks = new ArrayList<>();
-		for (Bookmark mark : bookmarks) {
-			if (mark.page() != page) {
-				marks.add(mark);
+	/** How many pages the book needs so that every map has the other page of its spread. */
+	public int requiredPages() {
+		int required = 0;
+		for (Plate plate : plates) {
+			if (plate.page() >= 0) {
+				required = Math.max(required, (plate.page() | 1) + 1);
 			}
 		}
-		if (color != null) {
-			marks.add(new Bookmark(page, color));
-		}
-		marks.sort((a, b) -> Integer.compare(a.page(), b.page()));
-		return new Atlas(plates, selected, marks);
-	}
-
-	public static Atlas of(Plate first) {
-		return new Atlas(List.of(first), 0, List.of());
+		return required;
 	}
 
 	/**
-	 * Notes are paired with map pages by position. When a map page is taken out,
-	 * its note page moves to the end of the book so the other notes stay beside
-	 * their maps and nothing written is lost.
+	 * Stitches a map into a book and quill (or an atlas) as its next page. If the
+	 * book ends on a left page, the map goes on the right, facing it. Otherwise
+	 * the map starts a new spread on the left, with an empty page for notes on
+	 * the right.
+	 *
+	 * @return the atlas, or an empty stack if the map can't be stitched in
 	 */
-	public static WritableBookContent withNoteMovedToEnd(WritableBookContent content, int page) {
+	public static ItemStack stitch(ItemStack book, ItemStack map, HolderLookup.Provider registries) {
+		MapId mapId = map.get(DataComponents.MAP_ID);
+		if (mapId == null || !map.is(Items.FILLED_MAP) || !book.is(Items.WRITABLE_BOOK)) {
+			return ItemStack.EMPTY;
+		}
+		Atlas atlas = read(book).orElse(EMPTY);
+		if (atlas.contains(mapId)) {
+			return ItemStack.EMPTY;
+		}
+
+		WritableBookContent content = book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY);
 		List<Filterable<String>> pages = new ArrayList<>(content.pages());
-		if (page < 0 || page >= pages.size()) {
-			return content;
+		while (pages.size() < atlas.requiredPages()) {
+			pages.add(Filterable.passThrough(""));
 		}
-		Filterable<String> note = pages.remove(page);
-		if (!note.raw().isEmpty()) {
-			pages.add(note);
+		int mapPage = pages.size();
+		boolean newSpread = mapPage % 2 == 0;
+		if (mapPage + (newSpread ? 2 : 1) > WritableBookContent.MAX_PAGES) {
+			return ItemStack.EMPTY;
 		}
-		return content.withReplacedPages(pages);
+		// The map page's own text is what the page shows without the mod.
+		pages.add(Filterable.passThrough(map.getHoverName().getString()));
+		if (newSpread) {
+			pages.add(Filterable.passThrough(""));
+		}
+
+		ItemStack out = book.copyWithCount(1);
+		out.set(DataComponents.WRITABLE_BOOK_CONTENT, content.withReplacedPages(pages));
+		List<Plate> plates = new ArrayList<>(atlas.plates());
+		plates.add(Plate.bound(map, mapPage, registries));
+		new Atlas(plates, atlas.selected()).write(out);
+		if (!out.has(DataComponents.CUSTOM_NAME)) {
+			out.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("item.mapplus.atlas", "Atlas"));
+		}
+		return out;
 	}
 }

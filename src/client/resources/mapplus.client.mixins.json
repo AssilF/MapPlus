@@ -3,6 +3,11 @@
 	"package": "com.assilf.mapplus.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"AbstractContainerScreenAccessor",
+		"BookAccessMixin",
+		"BookEditScreenMixin",
+		"BookViewScreenMixin",
+		"LecternScreenMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

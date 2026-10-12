@@ -68,6 +68,18 @@ public final class InkData extends SavedData {
 		return layers.computeIfAbsent(mapId.id(), id -> new InkLayer());
 	}
 
+	public boolean isSealed(MapId mapId) {
+		InkLayer layer = find(mapId);
+		return layer != null && layer.isSealed();
+	}
+
+	public void setSealed(MapId mapId, boolean sealed) {
+		if (isSealed(mapId) != sealed) {
+			getOrCreate(mapId).setSealed(sealed);
+			setDirty();
+		}
+	}
+
 	public void remove(MapId mapId) {
 		if (layers.remove(mapId.id()) != null) {
 			setDirty();
