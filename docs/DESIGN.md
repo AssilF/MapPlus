@@ -153,9 +153,13 @@ While looking through a spyglass:
 
 - **Far view:** the server sends chunks beyond the normal view distance, but
   only in a narrow cone along the line of sight, so you actually see distant
-  terrain instead of a magnified image. Range and cone width are configurable
-  and rate-limited. Needs the mod on the client; vanilla clients see the
-  vanilla spyglass.
+  terrain instead of a magnified image. Range (default 2× the server view
+  distance) and cone width are configurable and rate-limited. Needs the mod on
+  the client; vanilla clients see the vanilla spyglass.
+- **Chunk generation:** looking at land nobody has visited generates those
+  chunks, rate-limited and capped. On by default; a server setting turns it off
+  so only existing chunks are shown. This is the one feature that can leave
+  something behind after removal: normal vanilla terrain, as exploring would.
 - **Surveying:** with a map in the other hand, the map fills in from what you
   see, using vanilla's own map coloring and height shading. Only the part of the
   view inside the map's area fills in, and it fills progressively as you scan.
@@ -205,14 +209,51 @@ Fabric split client/common source sets plus the Fabric API.
 
 ## Future versions
 
-- **Territory and nations:** banner-based identity, claimed and held borders,
-  charters. Being designed.
-- **Spyglass upgrades:** zoom control (scroll while scoping) and treasure
-  enchantments for more zoom range, revealing entities (per-player glowing,
-  which vanilla clients can see too) and revealing structures (outlined bounds).
-- **Depth and cave mapping:** maps that record a chosen Y layer instead of the
-  surface, filled by exploring underground; cross-section and contour pages in
-  the atlas; possibly an echo shard "ping" that sketches nearby caves.
+### Territory and nations
+
+Visual only: borders are cartography, never rules. Nothing is protected or
+enforced.
+
+- **Identity:** a nation (or turf, town, guild) is a name plus a banner design
+  (base color and patterns, stored as vanilla stores them). Two nations can't
+  register the same design.
+- **Political map:** a kind of map, not a toggle. Made at the cartography table
+  from a filled map and a banner. It shows the same area with faded terrain,
+  borders in each nation's colors, names, and flags at capitals and along
+  borders.
+- **Held borders:** a nation's banner placed in the world is a border post and
+  holds a radius around it. Neighboring borders meet halfway. Shown as solid
+  borders.
+- **Claimed borders:** territory drawn in an atlas and assigned to a nation.
+  Shown as dashed borders.
+- **Contested land:** overlapping claims are hatched in both colors.
+- **Crossing a border:** "Entering <nation>" in the action bar, with the flag.
+  Vanilla clients get this too.
+- Banners stay vanilla blocks. MapPlus only remembers which banners count as
+  posts, in its own data.
+
+### Spyglass upgrades
+
+- Zoom control: scroll while scoping.
+- Treasure enchantments: more range; revealing entities (per-player glowing,
+  which vanilla clients can see too); revealing structures (outlined bounds).
+- Spyglass + compass + an enchantment: finds biomes you haven't discovered yet
+  (as tracked by vanilla's Adventuring Time progress), e.g. the compass points
+  to the nearest one and the spyglass shows its name on the horizon.
+
+### Depth and cave mapping
+
+- Maps that record a chosen Y level instead of the surface, filled by exploring
+  underground.
+- Cross-section and contour pages in the atlas.
+- Amethyst resonance: using an amethyst shard sends out a chime that sketches
+  nearby caves onto the held map.
+
+### Variant to revisit: citizenship
+
+Charters (an atlas bound to the nation's banner), citizenship papers as copies
+of the charter, copy generations as ranks, and possibly "whoever holds the
+original leads". Kept out of the main mod; may become a parallel variant.
 
 ## Decisions
 
@@ -226,12 +267,13 @@ Fabric split client/common source sets plus the Fabric API.
 - Foresight is treasure-only.
 - v1 spyglass: far view and map surveying only; zoom control and spyglass
   enchantments come later.
+- Spyglass chunk generation: on by default, server setting to turn it off.
+- Territory is visual only (future version); the political view is its own
+  kind of map.
 
 ## Open questions
 
 - Exact ink amounts after playtesting.
-- Can the spyglass generate new chunks, or only show chunks that already exist?
-- Spyglass far-view range.
 
 ## To verify on 26.3
 
