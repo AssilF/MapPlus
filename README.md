@@ -14,6 +14,20 @@ Put a filled map in a cartography table and press **Ink**.
 - Use a map on a water cauldron to wash all its ink off.
 - Every copy of a map shows the same ink, including maps in item frames, and players without the mod see it too.
 
+### Atlas
+Put a filled map in a cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with that map as its first page. Bind more maps the same way, with the atlas in the second slot. The maps are used up.
+
+Right-click the atlas to open it. Each spread shows a page of notes on the left and a map on the right.
+
+- **Explore:** the selected map keeps filling in as you walk while you hold the atlas, like a held map.
+- **Ink:** draw on the page with the usual ink tools.
+- **Notes:** write in the book with the vanilla book editor. Sign it like any book to make the atlas read-only; signed atlases can be copied like written books.
+- **Sketch:** add a blank page to draw on, using one paper.
+- **Take Out:** take a map page back out as a filled map.
+- **Ribbon:** mark a page with a dye ribbon (uses one dye); click a ribbon to jump to its page.
+
+Removing the mod leaves the atlas as an ordinary book with its notes.
+
 ### Spyglass survey
 Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too.
 
