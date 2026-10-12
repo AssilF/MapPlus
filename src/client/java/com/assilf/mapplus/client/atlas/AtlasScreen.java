@@ -41,6 +41,7 @@ public class AtlasScreen extends Screen {
 	private final InteractionHand hand;
 	private final MapRenderState mapRenderState = new MapRenderState();
 	private int page;
+	private boolean opened;
 
 	private int pageSize;
 	private int leftX;
@@ -76,7 +77,12 @@ public class AtlasScreen extends Screen {
 		leftX = width / 2 - pageSize - 2;
 		rightX = width / 2 + 2;
 		top = Math.max(18, (height - pageSize - 52) / 2);
-		atlas().ifPresent(atlas -> page = Math.min(atlas.selected(), Math.max(0, atlas.plates().size() - 1)));
+		// Open on the exploring page; keep the current page when returning from
+		// another screen or resizing.
+		if (!opened) {
+			opened = true;
+			atlas().ifPresent(atlas -> page = atlas.selected());
+		}
 
 		int row = top + pageSize + 6;
 		previous = addRenderableWidget(Button.builder(Component.literal("<"), b -> turn(-1))
@@ -147,7 +153,11 @@ public class AtlasScreen extends Screen {
 	}
 
 	private void send(AtlasActionPayload.Action action, int arg) {
-		ClientPlayNetworking.send(new AtlasActionPayload(hand == InteractionHand.OFF_HAND, action, page, arg));
+		int mapId = atlas()
+				.filter(atlas -> page >= 0 && page < atlas.plates().size())
+				.map(atlas -> atlas.plates().get(page).mapId())
+				.orElse(0);
+		ClientPlayNetworking.send(new AtlasActionPayload(hand == InteractionHand.OFF_HAND, action, page, mapId, arg));
 	}
 
 	private void openInk() {
@@ -240,6 +250,8 @@ public class AtlasScreen extends Screen {
 			return;
 		}
 		Atlas atlas = read.get();
+		// The atlas can shrink under the open screen before the next tick.
+		page = Math.max(0, Math.min(page, atlas.plates().size() - 1));
 
 		drawPaper(graphics, leftX, top);
 		drawPaper(graphics, rightX, top);

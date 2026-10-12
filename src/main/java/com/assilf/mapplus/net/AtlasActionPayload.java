@@ -10,10 +10,12 @@ import net.minecraft.world.InteractionHand;
 /**
  * Client changes the atlas it holds.
  *
- * @param page the map page the action applies to
- * @param arg  for {@link Action#BOOKMARK}, the dye id of the ribbon, or -1 to remove it
+ * @param page  the map page the action applies to
+ * @param mapId the map the client sees on that page; the action is ignored if
+ *              the page now holds a different map (the atlas changed meanwhile)
+ * @param arg   for {@link Action#BOOKMARK}, the dye id of the ribbon, or -1 to remove it
  */
-public record AtlasActionPayload(boolean offhand, Action action, int page, int arg) implements CustomPacketPayload {
+public record AtlasActionPayload(boolean offhand, Action action, int page, int mapId, int arg) implements CustomPacketPayload {
 	public enum Action {
 		/** Make a map page the one that explores while the atlas is held. */
 		SELECT,
@@ -30,6 +32,7 @@ public record AtlasActionPayload(boolean offhand, Action action, int page, int a
 			ByteBufCodecs.BOOL, AtlasActionPayload::offhand,
 			ByteBufCodecs.VAR_INT.map(i -> Action.values()[Math.floorMod(i, Action.values().length)], Action::ordinal), AtlasActionPayload::action,
 			ByteBufCodecs.VAR_INT, AtlasActionPayload::page,
+			ByteBufCodecs.VAR_INT, AtlasActionPayload::mapId,
 			ByteBufCodecs.VAR_INT, AtlasActionPayload::arg,
 			AtlasActionPayload::new
 	);

@@ -1,18 +1,25 @@
 package com.assilf.mapplus.atlas;
 
+import com.google.common.collect.MapMaker;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.server.network.Filterable;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.level.saveddata.maps.MapId;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -33,15 +40,51 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 	 * One map page.
 	 *
 	 * @param sketch whether this is a blank sketch page rather than a bound map
+	 * @param item   the map item as it was when bound, so markers, names and
+	 *               colors that live on the item come back when it is taken out
 	 */
-	public record Plate(int mapId, boolean sketch) {
+	public record Plate(int mapId, boolean sketch, Optional<CompoundTag> item) {
 		public static final Codec<Plate> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 				Codec.INT.fieldOf("map").forGetter(Plate::mapId),
-				Codec.BOOL.optionalFieldOf("sketch", false).forGetter(Plate::sketch)
+				Codec.BOOL.optionalFieldOf("sketch", false).forGetter(Plate::sketch),
+				CustomData.COMPOUND_TAG_CODEC.optionalFieldOf("item").forGetter(Plate::item)
 		).apply(instance, Plate::new));
+
+		private static final Map<CompoundTag, ItemStack> DECODED = new MapMaker().weakKeys().makeMap();
+
+		public Plate(int mapId, boolean sketch) {
+			this(mapId, sketch, Optional.empty());
+		}
+
+		/** A page for a map item, keeping the whole item. */
+		public static Plate bound(ItemStack map, HolderLookup.Provider registries) {
+			MapId id = map.get(DataComponents.MAP_ID);
+			Optional<CompoundTag> item = ItemStack.CODEC
+					.encodeStart(RegistryOps.create(NbtOps.INSTANCE, registries), map.copyWithCount(1))
+					.result()
+					.filter(CompoundTag.class::isInstance)
+					.map(CompoundTag.class::cast);
+			return new Plate(id == null ? 0 : id.id(), false, item);
+		}
 
 		public MapId id() {
 			return new MapId(mapId);
+		}
+
+		/**
+		 * The map item for this page: the item as bound, or a plain filled map.
+		 * The returned stack is shared; copy it before handing it out.
+		 */
+		public ItemStack mapStack(HolderLookup.Provider registries) {
+			ItemStack stack = item.map(tag -> DECODED.computeIfAbsent(tag, t -> ItemStack.CODEC
+					.parse(RegistryOps.create(NbtOps.INSTANCE, registries), t)
+					.result()
+					.orElse(ItemStack.EMPTY))).orElse(ItemStack.EMPTY);
+			if (!stack.is(Items.FILLED_MAP) || !id().equals(stack.get(DataComponents.MAP_ID))) {
+				stack = new ItemStack(Items.FILLED_MAP);
+				stack.set(DataComponents.MAP_ID, id());
+			}
+			return stack;
 		}
 	}
 
@@ -69,6 +112,9 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		return stack.is(Items.WRITABLE_BOOK) || stack.is(Items.WRITTEN_BOOK);
 	}
 
+	/** Parsed atlases, by item data. Item data never changes in place, so this never goes stale. */
+	private static final Map<CustomData, Optional<Atlas>> PARSED = new MapMaker().weakKeys().makeMap();
+
 	public static Optional<Atlas> read(ItemStack stack) {
 		if (!isBook(stack)) {
 			return Optional.empty();
@@ -77,6 +123,10 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		if (data == null) {
 			return Optional.empty();
 		}
+		return PARSED.computeIfAbsent(data, Atlas::parse);
+	}
+
+	private static Optional<Atlas> parse(CustomData data) {
 		Tag tag = data.copyTag().get(KEY);
 		if (tag == null) {
 			return Optional.empty();
@@ -151,7 +201,24 @@ public record Atlas(List<Plate> plates, int selected, List<Bookmark> bookmarks) 
 		return new Atlas(plates, selected, marks);
 	}
 
-	public static Atlas of(MapId first, boolean sketch) {
-		return new Atlas(List.of(new Plate(first.id(), sketch)), 0, List.of());
+	public static Atlas of(Plate first) {
+		return new Atlas(List.of(first), 0, List.of());
+	}
+
+	/**
+	 * Notes are paired with map pages by position. When a map page is taken out,
+	 * its note page moves to the end of the book so the other notes stay beside
+	 * their maps and nothing written is lost.
+	 */
+	public static WritableBookContent withNoteMovedToEnd(WritableBookContent content, int page) {
+		List<Filterable<String>> pages = new ArrayList<>(content.pages());
+		if (page < 0 || page >= pages.size()) {
+			return content;
+		}
+		Filterable<String> note = pages.remove(page);
+		if (!note.raw().isEmpty()) {
+			pages.add(note);
+		}
+		return content.withReplacedPages(pages);
 	}
 }

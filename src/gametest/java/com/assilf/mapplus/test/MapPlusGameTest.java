@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.network.Filterable;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
@@ -21,12 +22,15 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MapItem;
+import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+
+import java.util.List;
 
 public class MapPlusGameTest {
 	private static MapId newMap(ServerLevel level, BlockPos center) {
@@ -161,7 +165,7 @@ public class MapPlusGameTest {
 	@GameTest
 	public void atlasDataRoundTrips(GameTestHelper helper) {
 		ItemStack stack = new ItemStack(Items.WRITABLE_BOOK);
-		Atlas atlas = Atlas.of(new MapId(7), false)
+		Atlas atlas = Atlas.of(new Atlas.Plate(7, false))
 				.withPlate(new Atlas.Plate(9, true))
 				.withSelected(1)
 				.withBookmark(1, DyeColor.LIME);
@@ -169,6 +173,43 @@ public class MapPlusGameTest {
 		Atlas read = Atlas.read(stack).orElseThrow(() -> helper.assertionException(Component.literal("Atlas should read back")));
 		helper.assertValueEqual(read, atlas, Component.literal("atlas data"));
 		helper.assertFalse(Atlas.isAtlas(new ItemStack(Items.WRITABLE_BOOK)), Component.literal("A plain book is not an atlas"));
+		helper.succeed();
+	}
+
+	/** A bound map keeps its item data, so names and explorer markers come back. */
+	@GameTest
+	public void bindingKeepsTheMapItem(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+		MapId mapId = newMap(level, origin);
+		ItemStack named = mapItem(mapId);
+		named.set(DataComponents.CUSTOM_NAME, Component.literal("Village"));
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = new CartographyTableMenu(1, player.getInventory(), ContainerLevelAccess.create(level, origin));
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(named);
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.WRITABLE_BOOK));
+		Atlas atlas = Atlas.read(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem())
+				.orElseThrow(() -> helper.assertionException(Component.literal("Result should be an atlas")));
+
+		ItemStack back = atlas.plates().getFirst().mapStack(level.registryAccess());
+		helper.assertValueEqual(back.get(DataComponents.MAP_ID), mapId, Component.literal("map id"));
+		helper.assertValueEqual(back.getHoverName().getString(), "Village", Component.literal("map name"));
+		helper.succeed();
+	}
+
+	/** Taking a page out moves its note to the end, keeping the other notes beside their maps. */
+	@GameTest
+	public void takingOutKeepsNotesAligned(GameTestHelper helper) {
+		WritableBookContent notes = new WritableBookContent(List.of(
+				Filterable.passThrough("a"), Filterable.passThrough("b"), Filterable.passThrough("c")));
+		WritableBookContent moved = Atlas.withNoteMovedToEnd(notes, 1);
+		helper.assertValueEqual(moved.getPages(false).toList(), List.of("a", "c", "b"), Component.literal("notes after take-out"));
+
+		WritableBookContent blank = new WritableBookContent(List.of(
+				Filterable.passThrough("a"), Filterable.passThrough(""), Filterable.passThrough("c")));
+		helper.assertValueEqual(Atlas.withNoteMovedToEnd(blank, 1).getPages(false).toList(), List.of("a", "c"),
+				Component.literal("blank note dropped"));
 		helper.succeed();
 	}
 }

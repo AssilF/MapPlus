@@ -33,11 +33,12 @@ public class MapPlusClient implements ClientModInitializer {
 			}
 		});
 
-		// Right-clicking an atlas opens it; the server skips the vanilla book screen.
+		// Right-clicking an atlas opens it. FAIL stops the use here, so no use
+		// packet goes to the server and no vanilla book screen opens.
 		UseItemCallback.EVENT.register((player, level, hand) -> {
 			if (level.isClientSide() && Atlas.isAtlas(player.getItemInHand(hand))) {
 				Minecraft.getInstance().gui.setScreen(new AtlasScreen(hand));
-				return InteractionResult.SUCCESS;
+				return InteractionResult.FAIL;
 			}
 			return InteractionResult.PASS;
 		});

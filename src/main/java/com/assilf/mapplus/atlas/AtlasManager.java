@@ -20,6 +20,7 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
+import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
@@ -89,9 +90,9 @@ public final class AtlasManager {
 				}
 				continue;
 			}
-			ItemStack asMap = new ItemStack(Items.FILLED_MAP);
-			asMap.set(DataComponents.MAP_ID, mapId);
-			map.tickCarriedBy(player, asMap, null);
+			// The bound item carries explorer and treasure markers, which vanilla
+			// re-applies from the carried stack.
+			map.tickCarriedBy(player, plate.mapStack(level.registryAccess()), null);
 			Packet<?> packet = map.getUpdatePacket(mapId, player);
 			if (packet != null) {
 				player.connection.send(packet);
@@ -108,7 +109,9 @@ public final class AtlasManager {
 		}
 		Atlas atlas = read.get();
 		int page = payload.page();
-		boolean validPage = page >= 0 && page < atlas.plates().size();
+		boolean pageExists = page >= 0 && page < atlas.plates().size();
+		// Ignore actions aimed at a page that changed since the client saw it.
+		boolean validPage = pageExists && atlas.plates().get(page).mapId() == payload.mapId();
 
 		switch (payload.action()) {
 			case SELECT -> {
@@ -134,8 +137,11 @@ public final class AtlasManager {
 				}
 				Atlas.Plate plate = atlas.plates().get(page);
 				atlas.withoutPlate(page).write(stack);
-				ItemStack map = new ItemStack(Items.FILLED_MAP);
-				map.set(DataComponents.MAP_ID, plate.id());
+				WritableBookContent notes = stack.get(DataComponents.WRITABLE_BOOK_CONTENT);
+				if (notes != null) {
+					stack.set(DataComponents.WRITABLE_BOOK_CONTENT, Atlas.withNoteMovedToEnd(notes, page));
+				}
+				ItemStack map = plate.mapStack(player.level().registryAccess()).copy();
 				if (!player.getInventory().add(map)) {
 					Block.popResource(player.level(), player.blockPosition(), map);
 				}
@@ -149,7 +155,7 @@ public final class AtlasManager {
 					atlas.withBookmark(page, null).write(stack);
 					return;
 				}
-				if (payload.arg() >= DyeColor.values().length) {
+				if (payload.arg() >= DyeColor.values().length || atlas.bookmarks().stream().anyMatch(mark -> mark.page() == page)) {
 					return;
 				}
 				DyeColor color = DyeColor.byId(payload.arg());
