@@ -643,10 +643,11 @@ What was built, and where it differs from the plan above:
   chain, sign, banner. Clicking one picks it up from the inventory (or the off
   hand); clicking the one in hand puts it back. The brush-size buttons are gone:
   the feather draws 1 pixel, the brush 3.
-- **The bucket fills up to ink.** On bare map it floods everything up to the ink
-  lines around it, whatever the terrain; on ink it floods that ink. So a
-  border drawn with the chain or the item frame can be filled. The desk gets
-  the map's ink from the server for this (`InkLayerPayload`).
+- **The bucket fills up to ink.** On bare map it floods everything enclosed by
+  the ink lines around it, whatever the terrain; on ink it floods that ink.
+  Gaps of up to two pixels in a line hold the fill, so a dashed border drawn
+  with the chain can be filled. The desk gets the map's ink from the server
+  while the bucket is in hand (`InkLayerPayload`).
 - **Borders** are dashed ink lines (3 on, 2 off), drawn like the string's line.
 - **Labels:** click the map with a sign and type; scroll to size (small,
   medium, large), Enter to place, Esc to cancel. Letters cost 2, 4 or 8 pixels
@@ -660,12 +661,20 @@ What was built, and where it differs from the plan above:
 - **Players without the mod** see pins as banner markers and labels as banner
   markers named with their text, in the label's dye.
 - **Washing** in a cauldron removes ink and labels; pins stay.
-- **Seals are owned:** the sealer is recorded, and so is each map's maker (when
-  an empty map is used, or a blank canvas made). With `sealsAreOwned`, only the
-  sealer, the maker or an operator gets a result from an axe.
+- **Seals are owned:** each map's maker is recorded (when an empty map is used,
+  or a blank canvas made). On a map whose maker is known, the sealer is
+  recorded too, and with `sealsAreOwned` only the sealer, the maker or an
+  operator gets a result from an axe. Maps made before MapPlus have no maker,
+  so their seals have no owner and anyone can scrape them, as before; that way
+  a copy of an older map can't be used to lock its maker out. A sealed map
+  keeps its seal's owner.
+- **Labels stay on the map:** they can't be typed or sized wider than it, and
+  when drawn they're shrunk and moved in to fit, whatever was saved.
 - **Safety:** clients send plain text, cleaned of formatting codes, control and
-  invisible characters; at most 4 strokes and mark edits per player per tick;
-  each label and pin placed or removed is logged with who did it (`logMarks`).
+  invisible characters; strokes and mark edits are limited to about four a tick
+  per player (with room for bursts after lag), and placing, moving or removing
+  marks to about two a second; each label and pin placed or removed is logged
+  with who did it (`logMarks`).
 
 ## Data layout
 

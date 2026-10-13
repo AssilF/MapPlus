@@ -17,8 +17,8 @@ With the mod on both sides, the cartography table window gets a drawing desk on 
   | Brush | Pen, 3 pixels |
   | String | Line: drag from one end to the other |
   | Item frame | Box: drag from corner to corner |
-  | Bucket | Fill the area around the click, up to the ink around it |
-- **Seal:** honeycomb in the second slot seals a map's ink against drawing and washing; an axe scrapes the seal off (and takes damage). On servers, only whoever sealed the map, the map's maker or an operator can scrape it off.
+  | Bucket | Fill the area around the click, up to the ink lines around it (dashed borders hold it too) |
+- **Seal:** honeycomb in the second slot seals a map's ink against drawing and washing; an axe scrapes the seal off (and takes damage). On servers, only whoever sealed the map, the map's maker or an operator can scrape it off (for maps made since MapPlus was installed).
 - Shift-click dyes, ink sacs, water bottles, honeycomb, axes and books into the second slot.
 - Locking a map (glass pane) keeps its ink; zooming it out (paper) shrinks the ink onto the bigger map.
 - Use a map on a water cauldron to wash all its ink and labels off.
@@ -33,7 +33,7 @@ Place a **loom next to the cartography table** to mark maps up for planning: you
 - Drag a label or pin to move it, or drag it off the map to remove it. Click a label with a sign to rewrite it.
 - Labels and pins show on every copy of the map, held, framed and in atlases. Players without the mod see them as named banner markers.
 
-For example, to mark your turf: draw its border with an iron chain, write its name with a sign, and pin your banner.
+For example, to mark your turf: draw its border with an iron chain, fill it with the bucket if you like, write its name with a sign, and pin your banner.
 
 ### Atlas
 Put a filled map in the cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with the map stitched in as its next page. Stitch more maps the same way, with the atlas in the second slot. The maps are used up and can't be taken back out.
