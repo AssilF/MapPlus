@@ -318,6 +318,18 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.waitTicks(3);
 			context.getInput().pressKey(InputConstants.KEY_PAGEDOWN);
 			context.waitTicks(3);
+			context.runOnClient(client -> {
+				var screen = client.gui.screen();
+				net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.allowMouseClick(screen).register((s, e) -> {
+					System.out.println("MAPPLUS-DEBUG click allowed past the pad at " + e.x() + "," + e.y() + " button " + e.button());
+					return true;
+				});
+				net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.afterMouseClick(screen).register((s, e, handled) -> {
+					System.out.println("MAPPLUS-DEBUG click handled by the screen: " + handled + ", focused " + s.getFocused());
+					return false;
+				});
+				System.out.println("MAPPLUS-DEBUG screen " + screen.getClass().getName() + " pad " + ((SketchBookScreen) screen).mapplus$sketchPad());
+			});
 			// A tower: its walls, its roof, and a door.
 			sketch(context, 40, 110, 40, 40);
 			context.waitTicks(5);
