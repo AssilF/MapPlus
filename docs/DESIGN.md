@@ -72,13 +72,18 @@ the mod get the plain vanilla table.
 - **Ink is used up from that slot:** one dye, ink sac, glow ink sac or water
   bottle covers 256 pixels. A bar in the wing shows what is left of the
   current item.
-- **Tools:** pen, line, box and fill, as slot-style buttons with item icons
-  under the canvas. Scroll over the canvas to change the brush size (1-3).
+- **Tools are items on the cursor:** a feather (pen), brush (wide pen),
+  string (line), item frame (box) or bucket (fill, up to the ink around the
+  click). A rack under the canvas picks them up from the inventory. See
+  [Tools on the cursor](#tools-on-the-cursor).
+- **Planning, with a loom next to the table:** a sign writes labels, a banner
+  pins its marker, an iron chain draws dashed borders. See
+  [Labels](#labels-text-on-maps).
 - **Performance:** the canvas is the map's own texture, drawn the way vanilla
   draws maps in item frames. Only the stroke being drawn is overlaid.
 - Ink is still never written into the map's own colors; it is drawn into the
   map data sent to players, so vanilla clients see it too.
-- Dipping a map into a water cauldron still washes all its ink off.
+- Dipping a map into a water cauldron washes all its ink and labels off; pins stay.
 
 ### Atlas
 
@@ -190,8 +195,11 @@ While looking through a spyglass with a map in the other hand:
 
 ## Next: tools, painting and writing
 
-Planned from playtesting feedback; none of this is built yet. Each part starts
-with what was asked and what changed after review, then the design.
+Planned from playtesting feedback. Each part starts with what was asked and
+what changed after review, then the design. **Built so far:** tools on the
+cursor, labels, pins and borders (the planning desk), and owned seals; see
+[Built: the planning desk](#built-the-planning-desk) for where the build
+differs from the plan.
 
 One rule ties it together: **the tool says how, the ink says what.** The ink is
 the item in the table's second slot, or in your other hand: a dye or ink sac
@@ -615,12 +623,49 @@ takes ink from a hand. Effort: medium.
 
 ### Order
 
-1. Tools on the cursor (small): adds the shared `InkTool`.
-2. Choosing the page and cutting maps out (medium).
-3. Painting framed maps (medium): moves `Strokes` and the wallet to common code.
-4. One ink file per map, then watering down (medium).
-5. Labels (large), then pins, zones and borders on top of them.
-6. Sketches (medium).
+1. ~~Tools on the cursor~~ (built)
+2. ~~Labels, pins and borders, unlocked by a loom~~ (built); zones next
+3. Choosing the page and cutting maps out, with the book on the desk
+4. Painting framed maps
+5. One ink file per map, then watering down
+6. Sketches: in the hand with the quill only; at the table, on the book on the
+   desk, with all the table's tools
+
+### Built: the planning desk
+
+What was built, and where it differs from the plan above:
+
+- **A loom next to the table unlocks marking.** Labels (sign), pins (banner)
+  and borders (iron chain) need a loom in one of the eight blocks around the
+  table, on the same level, like bookshelves around an enchanting table
+  (`markingNeedsLoom`). Without one, those tools are faded on the rack.
+- **The rack** is eight tools: feather, brush, string, item frame, bucket, iron
+  chain, sign, banner. Clicking one picks it up from the inventory (or the off
+  hand); clicking the one in hand puts it back. The brush-size buttons are gone:
+  the feather draws 1 pixel, the brush 3.
+- **The bucket fills up to ink.** On bare map it floods everything up to the ink
+  lines around it, whatever the terrain; on ink it floods that ink. So a
+  border drawn with the chain or the item frame can be filled. The desk gets
+  the map's ink from the server for this (`InkLayerPayload`).
+- **Borders** are dashed ink lines (3 on, 2 off), drawn like the string's line.
+- **Labels:** click the map with a sign and type; scroll to size (small,
+  medium, large), Enter to place, Esc to cancel. Letters cost 2, 4 or 8 pixels
+  of ink each, in the second slot's dye. Click a label with a sign to rewrite
+  it (paying only for what's added in the same ink), drag it to move it, drag
+  it off the map to remove it. Up to 32 characters, 32 labels per map. Glowing
+  labels come later.
+- **Pins** are free and capped at 32 per map; a pin is the banner's own marker,
+  named with the banner's anvil name. The banner isn't used up. Moved and
+  removed like labels, with a banner on the cursor.
+- **Players without the mod** see pins as banner markers and labels as banner
+  markers named with their text, in the label's dye.
+- **Washing** in a cauldron removes ink and labels; pins stay.
+- **Seals are owned:** the sealer is recorded, and so is each map's maker (when
+  an empty map is used, or a blank canvas made). With `sealsAreOwned`, only the
+  sealer, the maker or an operator gets a result from an axe.
+- **Safety:** clients send plain text, cleaned of formatting codes, control and
+  invisible characters; at most 4 strokes and mark edits per player per tick;
+  each label and pin placed or removed is logged with who did it (`logMarks`).
 
 ## Data layout
 
