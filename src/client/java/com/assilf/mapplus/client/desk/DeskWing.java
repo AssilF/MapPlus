@@ -5,6 +5,7 @@ import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -303,7 +304,7 @@ public final class DeskWing {
 		if (!overWing(mouseX, mouseY)) {
 			return false;
 		}
-		if (button != 0) {
+		if (button != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
 		}
 		DeskTool[] tools = DeskTool.values();
