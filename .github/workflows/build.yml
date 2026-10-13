@@ -1,0 +1,100 @@
+# Builds the mod on every push. The jar is attached to each run as an artifact.
+# Running it manually with "inspect" set prints the signatures of the listed
+# Minecraft classes, to check vanilla names while developing.
+
+name: build
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      inspect:
+        description: 'Space-separated Minecraft or Fabric API classes to print signatures of; Class:regex keeps only matching lines; Class#method prints that method''s bytecode; @regex lists matching jar files (with PNG sizes); %regex prints them as base64'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+      - name: build
+        run: ./gradlew build --stacktrace
+      - name: capture build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MapPlus
+          path: build/libs/
+      - name: client game tests
+        if: ${{ inputs.inspect == '' }}
+        timeout-minutes: 20
+        run: |
+          # Loom starts its own virtual display in CI, as Fabric API's own client tests do.
+          sudo apt-get update -qq > /dev/null
+          sudo apt-get install -y -qq xvfb mesa-vulkan-drivers > /dev/null
+          ./gradlew runClientGameTest --stacktrace
+      - name: print client log
+        if: ${{ always() && inputs.inspect == '' }}
+        run: |
+          find build/run -name 'latest.log' | while read -r f; do
+            echo "--- $f"
+            tail -n 400 "$f"
+          done
+      - name: print screenshots
+        if: ${{ always() && inputs.inspect == '' }}
+        run: |
+          find build/run -name '*.png' -path '*screenshots*' | sort | while read -r f; do
+            echo "--- $f"
+            base64 -w0 "$f"
+            echo
+          done
+      - name: inspect minecraft classes
+        if: ${{ always() && inputs.inspect != '' }}
+        env:
+          CLASSES: ${{ inputs.inspect }}
+        run: |
+          JARS=$(find ~/.gradle .gradle -name '*.jar' \( -path '*minecraft*' -o -path '*loom*' -o -path '*fabric*' \) 2>/dev/null | grep -v sources | sort -u)
+          echo "$JARS" | head -40
+          CP=$(echo "$JARS" | paste -sd: -)
+          for spec in $CLASSES; do
+            case "$spec" in
+              '@'*|'%'*)
+                pat="${spec#?}"
+                echo "===== assets $spec"
+                for j in $JARS; do
+                  unzip -Z1 "$j" 2>/dev/null | grep -E "$pat" | while read -r e; do
+                    if [ "${spec:0:1}" = "%" ]; then
+                      echo "--- $e"
+                      unzip -p "$j" "$e" | base64 -w0
+                      echo
+                    else
+                      dims=$(unzip -p "$j" "$e" | head -c 24 | python3 -c 'import sys,struct;d=sys.stdin.buffer.read();print(struct.unpack(">II",d[16:24]) if d[:4]==b"\x89PNG" else "")')
+                      echo "$e $dims"
+                    fi
+                  done
+                done
+                continue
+                ;;
+              *'#'*)
+                c="${spec%%#*}"
+                m="${spec#*#}"
+                echo "===== $c#$m"
+                javap -c -p -cp "$CP" "$c" | awk -v m=" $m(" 'index($0, m) && !/^ *[0-9]+:/ {p=1} p {print} p && /^$/ {p=0}' || true
+                continue
+                ;;
+            esac
+            c="${spec%%:*}"
+            filter="."
+            if [ "$spec" != "$c" ]; then filter="${spec#*:}"; fi
+            echo "===== $c ($filter)"
+            javap -p -cp "$CP" "$c" | grep -E "$filter|class |interface |record " || true
+          done

@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"id": "mapplus",
+	"version": "${version}",
+	"name": "MapPlus",
+	"description": "Vanilla-feeling cartography: draw on maps with ink, survey with the spyglass, and plan your builds.",
+	"authors": [
+		"AssilF"
+	],
+	"contact": {
+		"sources": "https://github.com/AssilF/MapPlus"
+	},
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.assilf.mapplus.MapPlus"
+		],
+		"client": [
+			"com.assilf.mapplus.client.MapPlusClient"
+		]
+	},
+	"mixins": [
+		"mapplus.mixins.json",
+		{
+			"config": "mapplus.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

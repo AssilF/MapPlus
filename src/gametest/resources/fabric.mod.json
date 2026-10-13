@@ -1,0 +1,15 @@
+{
+	"schemaVersion": 1,
+	"id": "mapplus-test",
+	"version": "1.0.0",
+	"name": "MapPlus tests",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-gametest": [
+			"com.assilf.mapplus.test.MapPlusGameTest"
+		],
+		"fabric-client-gametest": [
+			"com.assilf.mapplus.test.MapPlusClientGameTest"
+		]
+	}
+}

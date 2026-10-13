@@ -1,0 +1,23 @@
+{
+	"required": true,
+	"package": "com.assilf.mapplus.client.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"AbstractContainerScreenAccessor",
+		"AbstractContainerScreenMixin",
+		"BookAccessMixin",
+		"BookEditScreenMixin",
+		"BookViewScreenMixin",
+		"CartographyTableScreenMixin",
+		"GuiGraphicsExtractorMixin",
+		"LecternScreenMixin",
+		"MapRendererMixin",
+		"MapRenderStateMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

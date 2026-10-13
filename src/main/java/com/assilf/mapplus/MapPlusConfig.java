@@ -1,0 +1,88 @@
+package com.assilf.mapplus;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+/**
+ * Server and client settings, stored in {@code config/mapplus.json}.
+ */
+public final class MapPlusConfig {
+	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+	/** Ink gained from one ink sac, dye or glow ink sac. */
+	public int inkPerItem = 256;
+	/** Pixels erased by one water bottle. */
+	public int waterPerBottle = 256;
+	/** Drawing is free in creative mode. */
+	public boolean creativeInkIsFree = true;
+
+	/** Labels, pins and borders need a loom next to the cartography table. */
+	public boolean markingNeedsLoom = true;
+	/** Labels one map can carry. */
+	public int maxLabelsPerMap = 32;
+	/** Pins one map can carry. */
+	public int maxPinsPerMap = 32;
+	/** Only whoever sealed a map, its maker or an operator can scrape the seal off. */
+	public boolean sealsAreOwned = true;
+	/** Log every label and pin placed, with who placed it. */
+	public boolean logMarks = true;
+
+	/** Whether looking through a spyglass while holding a map fills the map in. */
+	public boolean spyglassSurvey = true;
+	/** Map pixels the spyglass can fill per tick, per player. */
+	public int surveyPixelsPerTick = 48;
+	/** How far the spyglass surveys, as a multiple of the server view distance. */
+	public double surveyRangeMultiplier = 2.0;
+	/** Whether the spyglass may generate chunks nobody has visited yet. */
+	public boolean spyglassGeneratesChunks = true;
+	/** Chunks the spyglass may load or generate per tick, per player. */
+	public int surveyChunksPerTick = 2;
+
+	private static MapPlusConfig instance = new MapPlusConfig();
+
+	public static MapPlusConfig get() {
+		return instance;
+	}
+
+	public static void load() {
+		Path path = FabricLoader.getInstance().getConfigDir().resolve("mapplus.json");
+		MapPlusConfig config = new MapPlusConfig();
+
+		if (Files.exists(path)) {
+			try (Reader reader = Files.newBufferedReader(path)) {
+				MapPlusConfig read = GSON.fromJson(reader, MapPlusConfig.class);
+				if (read != null) {
+					config = read;
+				}
+			} catch (IOException | RuntimeException e) {
+				MapPlus.LOGGER.warn("Could not read {}, using defaults", path, e);
+			}
+		}
+
+		config.inkPerItem = Math.max(1, config.inkPerItem);
+		config.waterPerBottle = Math.max(1, config.waterPerBottle);
+		config.surveyPixelsPerTick = Math.max(0, config.surveyPixelsPerTick);
+		config.surveyRangeMultiplier = Math.max(1.0, config.surveyRangeMultiplier);
+		config.surveyChunksPerTick = Math.max(0, config.surveyChunksPerTick);
+		// Together they stay within what one map's marks packet can carry.
+		config.maxLabelsPerMap = Math.clamp(config.maxLabelsPerMap, 0, 512);
+		config.maxPinsPerMap = Math.clamp(config.maxPinsPerMap, 0, 512);
+		instance = config;
+
+		try {
+			Files.createDirectories(path.getParent());
+			try (Writer writer = Files.newBufferedWriter(path)) {
+				GSON.toJson(config, writer);
+			}
+		} catch (IOException e) {
+			MapPlus.LOGGER.warn("Could not write {}", path, e);
+		}
+	}
+}
