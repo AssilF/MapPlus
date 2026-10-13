@@ -10,7 +10,6 @@ import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.Mark;
 import com.assilf.mapplus.survey.MapPixels;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
@@ -34,6 +33,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 
 import java.util.List;
 
@@ -156,7 +156,7 @@ public final class Projection {
 				float size = Labels.fit(mark.text(), mark.size(), mark.x(), mark.y()).scale() * scale;
 				pose.pushPose();
 				pose.translate(x, ground + 0.06F, z);
-				pose.mulPose(Axis.XP.rotationDegrees(90.0F));
+				pose.mulPose(new Matrix4f().rotationX((float) Math.toRadians(90.0)));
 				pose.scale(size, size, size);
 				context.submitNodeCollector().submitText(pose, -font.width(text) / 2.0F, -4.0F, text, false, Font.DisplayMode.NORMAL, FULL_BRIGHT,
 						MarkRenderer.inkColor(mark), 0, 0);

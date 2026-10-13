@@ -37,7 +37,7 @@ public final class ScopeMap {
 	private static void extract(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
 		Minecraft minecraft = Minecraft.getInstance();
 		LocalPlayer player = minecraft.player;
-		if (player == null || minecraft.level == null || !player.isScoping() || minecraft.options.hideGui) {
+		if (player == null || minecraft.level == null || !player.isScoping()) {
 			return;
 		}
 		InteractionHand other = player.getUsedItemHand() == InteractionHand.MAIN_HAND ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
