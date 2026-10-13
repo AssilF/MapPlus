@@ -59,10 +59,6 @@ public abstract class HoldingPlayerMixin {
 	private int mapplus$territorySent;
 
 	@Shadow
-	@Final
-	MapItemSavedData this$0;
-
-	@Shadow
 	private void markColorsDirty(int x, int y) {
 	}
 
@@ -70,10 +66,11 @@ public abstract class HoldingPlayerMixin {
 	@Inject(method = "nextUpdatePacket", at = @At("HEAD"))
 	private void mapplus$resendTerritory(MapId mapId, CallbackInfoReturnable<Packet<?>> cir) {
 		MinecraftServer server = player.level().getServer();
-		if (server == null) {
+		MapItemSavedData map = player.level().getMapData(mapId);
+		if (server == null || map == null) {
 			return;
 		}
-		int version = Nations.territory(server, mapId, this$0).version();
+		int version = Nations.territory(server, mapId, map).version();
 		if (version != mapplus$territorySent) {
 			mapplus$territorySent = version;
 			markColorsDirty(0, 0);
@@ -91,7 +88,8 @@ public abstract class HoldingPlayerMixin {
 			return packet;
 		}
 		InkLayer layer = InkData.get(server).find(mapId);
-		Territory territory = Nations.territory(server, mapId, this$0);
+		MapItemSavedData map = player.level().getMapData(mapId);
+		Territory territory = map == null ? Territory.NONE : Nations.territory(server, mapId, map);
 		if (layer == null && territory.isEmpty()) {
 			return packet;
 		}
