@@ -6,7 +6,10 @@ import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkLayer;
 import com.assilf.mapplus.ink.MarkDecorations;
 import com.assilf.mapplus.net.MapMarksPayload;
+import com.assilf.mapplus.nation.Bounds;
+import com.assilf.mapplus.nation.Marches;
 import com.assilf.mapplus.nation.Nations;
+import com.assilf.mapplus.survey.MapPixels;
 import com.assilf.mapplus.nation.Territory;
 import com.assilf.mapplus.net.MapInkPayload;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
@@ -16,6 +19,7 @@ import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
@@ -27,11 +31,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.BitSet;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Draws ink and nations' territory into the map pixels sent to players, and
+ * Draws ink, nations' territory and the bounds a player's worn banner is
+ * walking into the map pixels sent to players, and
  * adds the map's marks to the markers sent to players without the mod. Only the packet changes; the
  * map's saved data never does, so vanilla clients see ink and marks, and
  * removing the mod leaves maps untouched. Players with the mod are sent the
@@ -58,6 +64,12 @@ public abstract class HoldingPlayerMixin {
 	@Unique
 	private int mapplus$territorySent;
 
+	/** The trail this player's worn banner had when they were last sent the map, and how many points it had. */
+	@Unique
+	private int mapplus$trailSent;
+	@Unique
+	private int mapplus$trailPoints;
+
 	@Shadow
 	private void markColorsDirty(int x, int y) {
 	}
@@ -76,6 +88,24 @@ public abstract class HoldingPlayerMixin {
 			markColorsDirty(0, 0);
 			markColorsDirty(Ink.SIZE - 1, Ink.SIZE - 1);
 		}
+		Marches.Worn worn = Marches.worn(player);
+		int trail = worn == null ? 0 : worn.bounds().version();
+		if (trail != mapplus$trailSent) {
+			int points = worn == null ? 0 : worn.bounds().count();
+			if (mapplus$trailSent != 0 && points > mapplus$trailPoints && mapplus$trailPoints > 0) {
+				// A march a step further: only its new steps are sent.
+				Bounds bounds = worn.bounds();
+				for (int i = mapplus$trailPoints - 1; i < points; i++) {
+					markColorsDirty(Math.clamp(MapPixels.pixelX(map, bounds.x(i)), 0, Ink.SIZE - 1),
+							Math.clamp(MapPixels.pixelZ(map, bounds.z(i)), 0, Ink.SIZE - 1));
+				}
+			} else {
+				markColorsDirty(0, 0);
+				markColorsDirty(Ink.SIZE - 1, Ink.SIZE - 1);
+			}
+			mapplus$trailSent = trail;
+			mapplus$trailPoints = points;
+		}
 	}
 
 	@ModifyReturnValue(method = "nextUpdatePacket", at = @At("RETURN"))
@@ -90,18 +120,23 @@ public abstract class HoldingPlayerMixin {
 		InkLayer layer = InkData.get(server).find(mapId);
 		MapItemSavedData map = player.level().getMapData(mapId);
 		Territory territory = map == null ? Territory.NONE : Nations.territory(server, mapId, map);
-		if (layer == null && territory.isEmpty()) {
+		Marches.Worn worn = map == null ? null : Marches.worn(player);
+		BitSet trail = worn == null ? new BitSet() : worn.bounds().pixels(map);
+		if (layer == null && territory.isEmpty() && trail.isEmpty() && !mapplus$hadInk) {
 			return packet;
 		}
 
 		boolean modded = player instanceof ServerPlayer serverPlayer && MapPlus.hasMod(serverPlayer);
 		// Sent before the pixels, so the map is blended with the tints that go with them.
-		int inkVersion = 31 * (layer == null ? 0 : layer.inkVersion()) + territory.version();
+		int inkVersion = 31 * (31 * (layer == null ? 0 : layer.inkVersion()) + territory.version()) + (trail.isEmpty() ? 0 : worn.bounds().version());
 		if (modded && mapplus$inkSent != inkVersion) {
 			mapplus$inkSent = inkVersion;
 			byte[] ink = layer == null ? new byte[Ink.PIXELS] : layer.pixels().clone();
 			territory.addTo(ink);
-			boolean hasInk = !territory.isEmpty() || layer != null && !layer.isEmpty();
+			for (int i = trail.nextSetBit(0); i >= 0; i = trail.nextSetBit(i + 1)) {
+				ink[i] = Ink.encode(worn.color(), false, Ink.FULL);
+			}
+			boolean hasInk = !territory.isEmpty() || !trail.isEmpty() || layer != null && !layer.isEmpty();
 			if (hasInk || mapplus$hadInk) {
 				ServerPlayNetworking.send((ServerPlayer) player, new MapInkPayload(mapId.id(), ink));
 			}
@@ -113,6 +148,16 @@ public abstract class HoldingPlayerMixin {
 			territory.overlay(colors.startX(), colors.startY(), colors.width(), colors.height(), inked, !modded);
 			if (layer != null) {
 				layer.overlay(colors.startX(), colors.startY(), colors.width(), colors.height(), inked, !modded);
+			}
+			if (!trail.isEmpty()) {
+				byte color = worn.color().getMapColor().getPackedId(MapColor.Brightness.NORMAL);
+				for (int y = 0; y < colors.height(); y++) {
+					for (int x = 0; x < colors.width(); x++) {
+						if (trail.get(colors.startX() + x + (colors.startY() + y) * Ink.SIZE)) {
+							inked[x + y * colors.width()] = color;
+						}
+					}
+				}
 			}
 			return new MapItemSavedData.MapPatch(colors.startX(), colors.startY(), colors.width(), colors.height(), inked);
 		});

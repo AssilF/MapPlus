@@ -3,6 +3,8 @@ package com.assilf.mapplus.client.mixin;
 import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.client.atlas.AtlasBookScreen;
 import com.assilf.mapplus.client.atlas.AtlasSpread;
+import com.assilf.mapplus.client.atlas.SketchBookScreen;
+import com.assilf.mapplus.client.atlas.SketchPad;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -30,10 +32,12 @@ import java.util.List;
 
 /**
  * An atlas in the vanilla book and quill screen: written pages work as usual,
- * and a stitched map shows on the page facing its notes.
+ * and a stitched map shows on the page facing its notes. Any book and quill
+ * can be sketched in (see {@link SketchPad}); a sketched page has no room for
+ * text.
  */
 @Mixin(BookEditScreen.class)
-public abstract class BookEditScreenMixin extends Screen implements AtlasBookScreen {
+public abstract class BookEditScreenMixin extends Screen implements AtlasBookScreen, SketchBookScreen {
 	@Shadow
 	private int currentPage;
 
@@ -69,6 +73,9 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 	@Unique
 	private int mapplus$turnedFrom;
 
+	@Unique
+	private SketchPad mapplus$sketchPad;
+
 	protected BookEditScreenMixin(Component title) {
 		super(title);
 	}
@@ -90,6 +97,7 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 
 	@Inject(method = "<init>", at = @At("TAIL"))
 	private void mapplus$openAtlas(Player owner, ItemStack book, InteractionHand hand, WritableBookContent content, CallbackInfo ci) {
+		mapplus$sketchPad = new SketchPad(this);
 		mapplus$atlas = Atlas.read(book).orElse(null);
 		if (mapplus$atlas == null) {
 			return;
@@ -144,6 +152,17 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 	private void mapplus$beforeExtract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if (mapplus$atlas != null) {
 			mapplus$followPage();
+		} else {
+			page.visible = true;
+			page.active = true;
+		}
+		// A sketched page has no room for text.
+		if (mapplus$sketchPad.isSketch(currentPage)) {
+			page.visible = false;
+			page.active = false;
+			if (getFocused() == page) {
+				setFocused(null);
+			}
 		}
 	}
 
@@ -156,7 +175,7 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 			return;
 		}
 		AtlasSpread.drawPage(graphics, texture, x, y, layout.mirrored());
-		AtlasSpread.drawSpread(graphics, layout, mapplus$atlas, x, y, index -> Component.literal(pages.get(index)));
+		AtlasSpread.drawSpread(graphics, layout, mapplus$atlas, x, y, index -> Component.literal(pages.get(index)), mapplus$sketchPad::sketch);
 	}
 
 	@Override
@@ -218,17 +237,58 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 		}
 	}
 
-	/** Trailing empty pages are dropped on save, except the notes pages facing maps. */
+	/** Trailing empty pages are dropped on save, except the notes pages facing maps, and sketched pages. */
 	@Inject(method = "eraseEmptyTrailingPages", at = @At("HEAD"), cancellable = true)
 	private void mapplus$keepNotesPages(CallbackInfo ci) {
-		if (mapplus$atlas == null) {
+		int keep = mapplus$atlas == null ? 0 : mapplus$atlas.requiredPages();
+		for (int index = pages.size() - 1; index >= keep; index--) {
+			if (mapplus$sketchPad.isSketch(index)) {
+				keep = index + 1;
+			}
+		}
+		if (mapplus$atlas == null && keep == 0) {
 			return;
 		}
 		ci.cancel();
-		int keep = mapplus$atlas.requiredPages();
 		while (pages.size() > keep && pages.getLast().isEmpty()) {
 			pages.removeLast();
 		}
+	}
+
+	@Override
+	public SketchPad mapplus$sketchPad() {
+		return mapplus$sketchPad;
+	}
+
+	@Override
+	public int mapplus$currentPage() {
+		return currentPage;
+	}
+
+	@Override
+	public boolean mapplus$hasText(int index) {
+		return index >= 0 && index < pages.size() && !pages.get(index).isBlank();
+	}
+
+	@Override
+	public boolean mapplus$isMapPage(int index) {
+		return mapplus$atlas != null && mapplus$atlas.isMapPage(index);
+	}
+
+	@Override
+	public InteractionHand mapplus$bookHand() {
+		return hand;
+	}
+
+	/** The writing area is the text box's inside, wherever the page is in its spread. */
+	@Override
+	public int mapplus$writingX() {
+		return page.getX() + 4;
+	}
+
+	@Override
+	public int mapplus$writingY() {
+		return page.getY() + 4;
 	}
 
 	@Override

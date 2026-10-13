@@ -2,6 +2,8 @@ package com.assilf.mapplus.client;
 
 import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.client.atlas.AtlasBookScreen;
+import com.assilf.mapplus.client.atlas.SketchBookScreen;
+import com.assilf.mapplus.client.atlas.SketchPad;
 import com.assilf.mapplus.client.desk.DeskState;
 import com.assilf.mapplus.client.desk.DeskWing;
 import com.assilf.mapplus.client.foresight.Projection;
@@ -73,7 +75,19 @@ public class MapPlusClient implements ClientModInitializer {
 			if (screen instanceof AtlasBookScreen book) {
 				ScreenEvents.remove(screen).register(closed -> leftOpen(book));
 			}
+			if (screen instanceof SketchBookScreen book && book.mapplus$sketchPad() != null) {
+				attachSketchPad(screen, book.mapplus$sketchPad());
+			}
 		});
+	}
+
+	private static void attachSketchPad(Screen screen, SketchPad pad) {
+		ScreenEvents.afterBackground(screen).register((s, graphics, mouseX, mouseY, delta) -> pad.extract(graphics, mouseX, mouseY));
+		ScreenEvents.afterTick(screen).register(s -> pad.tick());
+		ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> !pad.mouseClicked(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseDrag(screen).register((s, event, dx, dy) -> !pad.mouseDragged(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseRelease(screen).register((s, event) -> !pad.mouseReleased(event.x(), event.y(), event.button()));
+		ScreenEvents.remove(screen).register(s -> pad.finish());
 	}
 
 	private static void attachDesk(CartographyTableScreen table) {

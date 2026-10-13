@@ -2,6 +2,18 @@ package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.atlas.Atlas;
+import com.assilf.mapplus.atlas.Sketch;
+import com.assilf.mapplus.ink.Sketching;
+import com.assilf.mapplus.nation.Bounds;
+import com.assilf.mapplus.nation.Claim;
+import com.assilf.mapplus.nation.Marches;
+import com.assilf.mapplus.nation.NationData;
+import com.assilf.mapplus.nation.Nations;
+import com.assilf.mapplus.net.SketchPayload;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.AbstractBannerBlock;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.ink.FramePainting;
 import com.assilf.mapplus.ink.Ink;
@@ -760,6 +772,124 @@ public class MapPlusGameTest {
 		helper.assertValueEqual(back.get(DataComponents.MAP_ID), mapId, Component.literal("map id"));
 		helper.assertValueEqual(back.getHoverName().getString(), "Village", Component.literal("map name"));
 		helper.assertValueEqual(pages(atlasStack).getFirst(), "Village", Component.literal("map page text without the mod"));
+		helper.succeed();
+	}
+
+	/** A walked trail claims itself and the land it closes in, but never another nation's land. */
+	@GameTest
+	public void walkedBoundsClaimWhatTheyCloseIn(GameTestHelper helper) {
+		// A loop 40 blocks across, back to where it began, around a small patch of another nation's land.
+		int[] loop = {0, 0, 40, 0, 40, 40, 0, 40, 0, 0};
+		Claim claim = Claim.annex(loop, (x, z) -> false, (x, z) -> x >= 30 && x < 34 && z >= 30 && z < 34);
+		helper.assertTrue(claim.holds(20, 20), Component.literal("the land inside the loop"));
+		helper.assertTrue(claim.holds(40, 20), Component.literal("the trail itself"));
+		helper.assertFalse(claim.holds(60, 20), Component.literal("the land outside"));
+		helper.assertFalse(claim.holds(31, 31), Component.literal("another nation's land inside the loop"));
+		Claim decoded = Claim.CODEC.parse(NbtOps.INSTANCE, Claim.CODEC.encodeStart(NbtOps.INSTANCE, claim).getOrThrow()).getOrThrow();
+		helper.assertValueEqual(decoded.area(), claim.area(), Component.literal("a claim saved and read back"));
+
+		// A trail that loops nowhere takes only itself.
+		Claim line = Claim.annex(new int[] {0, 0, 40, 0}, (x, z) -> false, (x, z) -> false);
+		helper.assertTrue(line.holds(20, 0), Component.literal("the trail"));
+		helper.assertFalse(line.holds(20, 20), Component.literal("nothing beside it"));
+
+		// Out of the nation's own land and back into it closes in the land between.
+		Claim back = Claim.annex(new int[] {0, 0, 0, 40, 40, 40, 40, 0}, (x, z) -> z < 2, (x, z) -> false);
+		helper.assertTrue(back.holds(20, 20), Component.literal("land closed in by the trail and the nation's own land"));
+		helper.succeed();
+	}
+
+	/** Wearing a named banner walks the bounds of land; planted, it claims them, and the map in hand shows the trail. */
+	@GameTest
+	public void marchingBannersClaimLand(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		ItemStack banner = new ItemStack(Items.BANNER.pick(DyeColor.LIME));
+		helper.assertValueEqual(banner.get(DataComponents.EQUIPPABLE) == null ? null : banner.get(DataComponents.EQUIPPABLE).slot(),
+				EquipmentSlot.HEAD, Component.literal("a banner is worn on the head"));
+		banner.set(DataComponents.CUSTOM_NAME, Component.literal("Limeland"));
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		player.setItemSlot(EquipmentSlot.HEAD, banner);
+		BlockPos start = helper.absolutePos(new BlockPos(1, 1, 1));
+		int x = start.getX();
+		int z = start.getZ();
+		MapId mapId = newMap(level, start);
+		MapItemSavedData map = level.getMapData(mapId);
+		map.getHoldingPlayer(player);
+		map.getUpdatePacket(mapId, player);
+
+		int[][] walk = {{0, 0}, {24, 0}, {24, 24}, {0, 24}, {0, 0}};
+		for (int[] step : walk) {
+			player.setPos(x + step[0] + 0.5, start.getY(), z + step[1] + 0.5);
+			Marches.step(player);
+		}
+		Bounds bounds = Bounds.read(player.getItemBySlot(EquipmentSlot.HEAD));
+		helper.assertTrue(bounds != null && bounds.closed(), Component.literal("back at the start, the bounds are walked"));
+
+		// The map held shows the trail, dashed, in the banner's color.
+		byte lime = DyeColor.LIME.getMapColor().getPackedId(MapColor.Brightness.NORMAL);
+		MapItemSavedData.MapPatch patch = firstPatch(helper, map, mapId, player);
+		boolean trail = false;
+		for (int i = 0; i < patch.width(); i++) {
+			trail |= patch.mapColors()[i + (MapPixels.pixelZ(map, z) - patch.startY()) * patch.width()] == lime;
+		}
+		helper.assertTrue(trail, Component.literal("the trail shows on the map in hand"));
+
+		BlockPos post = helper.absolutePos(new BlockPos(5, 1, 5));
+		AbstractBannerBlock limeBanner = (AbstractBannerBlock) ((BlockItem) Items.BANNER.pick(DyeColor.LIME)).getBlock();
+		helper.setBlock(new BlockPos(5, 1, 5), limeBanner);
+		Nations.placed(level, post, limeBanner, player, player.getItemBySlot(EquipmentSlot.HEAD));
+		Post planted = NationData.get(level.getServer()).posts().stream().filter(p -> p.pos().equals(post)).findFirst()
+				.orElseThrow(() -> helper.assertionException(Component.literal("the banner should be a post")));
+		helper.assertTrue(planted.claim().holds(x + 12, z + 12), Component.literal("the land inside the walked bounds"));
+		helper.assertFalse(planted.claim().holds(x + 40, z + 12), Component.literal("the land outside them"));
+		NationData.get(level.getServer()).remove(level.dimension(), post);
+		helper.succeed();
+	}
+
+	/** A map shows a nation's land only once the nation's banner is marked on it. */
+	@GameTest
+	public void bordersShowOnceTheBannerIsOnTheMap(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		java.util.Arrays.fill(map.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
+		helper.setBlock(new BlockPos(2, 1, 2), ((BlockItem) Items.BANNER.pick(DyeColor.ORANGE)).getBlock());
+		NationData data = NationData.get(level.getServer());
+		data.put(new Post(level.dimension(), at, DyeColor.ORANGE, List.of(), "Orangeland"));
+		helper.assertTrue(Nations.territory(level.getServer(), mapId, map).isEmpty(), Component.literal("no borders before the banner is marked"));
+		helper.assertTrue(map.toggleBanner(level, at), Component.literal("using the map on the banner marks it"));
+		Territory shown = Nations.territory(level.getServer(), mapId, map);
+		helper.assertValueEqual(shown.owner(MapPixels.pixelX(map, at.getX()) + MapPixels.pixelZ(map, at.getZ()) * Ink.SIZE), 1,
+				Component.literal("the nation's land, once its banner is on the map"));
+		data.remove(level.dimension(), at);
+		helper.succeed();
+	}
+
+	/** A book and quill's empty pages take sketches, paid for with the ink in the other hand; pages with text don't. */
+	@GameTest
+	public void sketchesAreDrawnInBooks(GameTestHelper helper) {
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		ItemStack book = new ItemStack(Items.WRITABLE_BOOK);
+		book.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(Filterable.passThrough("Notes"))));
+		player.setItemInHand(InteractionHand.MAIN_HAND, book);
+		player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.DYE.pick(DyeColor.GREEN), 2));
+		BitSet line = new BitSet(Sketch.PIXELS);
+		for (int x = 10; x < 60; x++) {
+			line.set(x + 20 * Sketch.WIDTH);
+		}
+		Sketching.draw(player, new SketchPayload(false, 1, Ink.FULL, false, line));
+		Atlas atlas = Atlas.read(player.getMainHandItem()).orElseThrow(() -> helper.assertionException(Component.literal("the book has a sketch")));
+		Sketch sketch = atlas.sketchAt(1);
+		helper.assertTrue(sketch != null && Ink.isPresent(sketch.get(30 + 20 * Sketch.WIDTH)) && Ink.dye(sketch.get(30 + 20 * Sketch.WIDTH)) == DyeColor.GREEN,
+				Component.literal("a green line on the empty page"));
+		helper.assertValueEqual(atlas.requiredPages(), 2, Component.literal("the sketched page is kept"));
+
+		Sketching.draw(player, new SketchPayload(false, 0, Ink.FULL, false, line));
+		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(0) == null, Component.literal("no sketch over text"));
+
+		Sketching.draw(player, new SketchPayload(false, 1, Ink.FULL, true, line));
+		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(1) == null, Component.literal("erased, the page is empty again"));
 		helper.succeed();
 	}
 }

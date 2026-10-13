@@ -52,5 +52,11 @@
 	"mapplus.desk.palette.water": "Water",
 	"mapplus.desk.palette.count": "%s in your inventory",
 	"mapplus.drawing": "Drawing",
-	"mapplus.frame.sealed": "Sealed with wax"
+	"mapplus.frame.sealed": "Sealed with wax",
+	"mapplus.bounds.start": "Walking the bounds of %s",
+	"mapplus.bounds.broken": "The march broke off; the bounds of %s start again here",
+	"mapplus.bounds.closed": "The bounds of %s are walked: plant the banner to claim them",
+	"mapplus.bounds.full": "The banner can't remember any more: head back to close the bounds of %s",
+	"mapplus.bounds.progress": "Bounds of %s: %s blocks walked, %s back to the start",
+	"mapplus.nation.claimed": "%s claims %s blocks of land"
 }

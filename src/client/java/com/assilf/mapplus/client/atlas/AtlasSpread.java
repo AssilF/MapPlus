@@ -161,10 +161,11 @@ public final class AtlasSpread {
 	 * Draws what the spread adds to the vanilla page at {@code left, top}: the
 	 * facing page, and any maps.
 	 *
-	 * @param text the text of a book page, for a facing text page
+	 * @param text     the text of a book page, for a facing text page
+	 * @param sketches the sketch on a book page, or null, for a facing sketched page
 	 */
 	public static void drawSpread(GuiGraphicsExtractor graphics, Layout layout, Atlas atlas, int left, int top,
-			IntFunction<Component> text) {
+			IntFunction<Component> text, IntFunction<byte[]> sketches) {
 		if (layout.here() != null) {
 			drawMap(graphics, layout.here(), left, top, layout.mirrored());
 		}
@@ -175,11 +176,20 @@ public final class AtlasSpread {
 		int facingLeft = left + (layout.facingRight() ? FACING_OFFSET : -FACING_OFFSET);
 		drawPage(graphics, BookViewScreen.BOOK_LOCATION, facingLeft, top, facingMirrored);
 		Atlas.Plate facingMap = atlas.plateAt(layout.facing());
+		byte[] sketch = sketches.apply(layout.facing());
 		if (facingMap != null) {
 			drawMap(graphics, facingMap, facingLeft, top, facingMirrored);
+		} else if (sketch != null) {
+			drawSketch(graphics, sketch, facingLeft, top, facingMirrored);
 		} else {
 			drawText(graphics, text.apply(layout.facing()), facingLeft, top, facingMirrored);
 		}
+	}
+
+	/** A sketch on a page drawn at {@code left, top}, where the page's text would be. */
+	public static void drawSketch(GuiGraphicsExtractor graphics, byte[] sketch, int left, int top, boolean mirrored) {
+		SketchView.draw(graphics, sketch, left + BookViewScreen.PAGE_TEXT_X_OFFSET + (mirrored ? MIRROR_OFFSET : 0),
+				top + BookViewScreen.PAGE_TEXT_Y_OFFSET);
 	}
 
 	/** A map pasted onto a page, on its own paper, with its name above it. */

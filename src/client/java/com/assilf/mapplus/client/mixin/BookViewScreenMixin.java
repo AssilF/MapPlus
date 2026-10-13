@@ -1,6 +1,7 @@
 package com.assilf.mapplus.client.mixin;
 
 import com.assilf.mapplus.atlas.Atlas;
+import com.assilf.mapplus.atlas.Sketch;
 import com.assilf.mapplus.client.atlas.AtlasBookScreen;
 import com.assilf.mapplus.client.atlas.AtlasSpread;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
@@ -108,12 +109,20 @@ public abstract class BookViewScreenMixin extends Screen implements AtlasBookScr
 	private void mapplus$drawSpread(GuiGraphicsExtractor graphics, RenderPipeline pipeline, Identifier texture, int x, int y,
 			float u, float v, int width, int height, int textureWidth, int textureHeight, Operation<Void> original) {
 		AtlasSpread.Layout layout = mapplus$layout();
+		Atlas atlas = mapplus$atlas();
 		if (layout == null) {
 			original.call(graphics, pipeline, texture, x, y, u, v, width, height, textureWidth, textureHeight);
-			return;
+		} else {
+			AtlasSpread.drawPage(graphics, texture, x, y, layout.mirrored());
+			AtlasSpread.drawSpread(graphics, layout, atlas, x, y, bookAccess::getPage, index -> {
+				Sketch sketch = atlas.sketchAt(index);
+				return sketch == null ? null : sketch.ink();
+			});
 		}
-		AtlasSpread.drawPage(graphics, texture, x, y, layout.mirrored());
-		AtlasSpread.drawSpread(graphics, layout, mapplus$atlas(), x, y, bookAccess::getPage);
+		Sketch sketch = atlas == null ? null : atlas.sketchAt(currentPage);
+		if (sketch != null) {
+			AtlasSpread.drawSketch(graphics, sketch.ink(), x, y, false);
+		}
 	}
 
 	@Override

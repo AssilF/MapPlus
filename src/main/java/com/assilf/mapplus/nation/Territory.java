@@ -19,21 +19,25 @@ import java.util.PriorityQueue;
  * that is: plains are easy to hold, forests, snow and slopes less so, and
  * mountains least of all, so borders follow the lie of the land. Neighbors
  * meet where their reach does, water stops it, so rivers and coasts become
- * borders, and land a nation surrounds on every side becomes its own. Only
- * land the map has explored is held.
+ * borders, and land a nation surrounds on every side becomes its own. Land a
+ * post's banner walked the bounds of is held first, whatever it is, and other
+ * posts' reach stops at it. Only land the map has explored is held.
  */
 public final class Territory {
-	public static final Territory NONE = new Territory(new byte[0], List.of());
+	public static final Territory NONE = new Territory(new byte[0], List.of(), List.of());
 
 	/** Which nation holds each pixel, counted from 1, or 0 for no one. */
 	private final byte[] owners;
 	private final List<DyeColor> colors;
+	/** Each nation's design, by the number it holds pixels with. */
+	private final List<String> designs;
 	/** Tells territories apart, so maps are sent again when theirs changes; 0 for no territory. */
 	private final int version;
 
-	private Territory(byte[] owners, List<DyeColor> colors) {
+	private Territory(byte[] owners, List<DyeColor> colors, List<String> designs) {
 		this.owners = owners;
 		this.colors = colors;
+		this.designs = designs;
 		this.version = owners.length == 0 ? 0 : 31 * Arrays.hashCode(owners) + colors.hashCode() | 1;
 	}
 
@@ -52,6 +56,26 @@ public final class Territory {
 
 	public DyeColor color(int owner) {
 		return colors.get(owner - 1);
+	}
+
+	/**
+	 * Only the land of some nations, by design: the others' land shows as no
+	 * one's, though it still stopped these nations' borders where it did.
+	 */
+	public Territory only(java.util.Set<String> shown) {
+		if (isEmpty() || shown.containsAll(designs)) {
+			return this;
+		}
+		byte[] kept = owners.clone();
+		boolean any = false;
+		for (int i = 0; i < kept.length; i++) {
+			int owner = kept[i] & 0xFF;
+			if (owner != 0 && !shown.contains(designs.get(owner - 1))) {
+				kept[i] = 0;
+			}
+			any |= kept[i] != 0;
+		}
+		return any ? new Territory(kept, colors, designs) : NONE;
 	}
 
 	/** Whether a held pixel is on its nation's edge, where a neighbor isn't held by the same nation. */
@@ -121,12 +145,39 @@ public final class Territory {
 
 		Map<String, Integer> nations = new HashMap<>();
 		List<DyeColor> colors = new ArrayList<>();
+		List<String> designs = new ArrayList<>();
 		// Costs in tenths of a block, so diagonal steps can cost 1.4 of a straight one.
 		int[] cost = new int[Ink.PIXELS];
 		Arrays.fill(cost, Integer.MAX_VALUE);
 		byte[] owners = new byte[Ink.PIXELS];
+		// Pixels held by walked bounds: no one else's reach takes them.
+		boolean[] claimed = new boolean[Ink.PIXELS];
 		PriorityQueue<long[]> queue = new PriorityQueue<>((a, b) -> Long.compare(a[0], b[0]));
 		int limit = reach * 10;
+
+		// Walked bounds first, the oldest first, so a later claim never takes an earlier one's land.
+		int mapMinX = MapPixels.worldX(map, 0);
+		int mapMinZ = MapPixels.worldZ(map, 0);
+		int mapMaxX = MapPixels.worldX(map, Ink.SIZE);
+		int mapMaxZ = MapPixels.worldZ(map, Ink.SIZE);
+		for (Post post : posts) {
+			if (!post.dimension().equals(map.dimension) || !post.claim().overlaps(mapMinX, mapMinZ, mapMaxX, mapMaxZ)) {
+				continue;
+			}
+			int nation = nation(post, nations, colors, designs);
+			if (nation == 0) {
+				continue;
+			}
+			for (int pz = 0; pz < Ink.SIZE; pz++) {
+				for (int px = 0; px < Ink.SIZE; px++) {
+					int index = px + pz * Ink.SIZE;
+					if (!claimed[index] && post.claim().holds(MapPixels.worldX(map, px) + scale / 2, MapPixels.worldZ(map, pz) + scale / 2)) {
+						claimed[index] = true;
+						owners[index] = (byte) nation;
+					}
+				}
+			}
+		}
 
 		for (Post post : posts) {
 			int x = post.pos().getX();
@@ -134,14 +185,9 @@ public final class Territory {
 			if (!post.dimension().equals(map.dimension) || x < minX || x >= maxX || z < minZ || z >= maxZ) {
 				continue;
 			}
-			Integer nation = nations.get(post.design());
-			if (nation == null) {
-				if (colors.size() >= 255) {
-					continue;
-				}
-				colors.add(post.color());
-				nation = colors.size();
-				nations.put(post.design(), nation);
+			int nation = nation(post, nations, colors, designs);
+			if (nation == 0) {
+				continue;
 			}
 			// A post off the map holds land from the edge nearest to it, as far as it still reaches.
 			int px = Math.clamp(MapPixels.pixelX(map, x), 0, Ink.SIZE - 1);
@@ -150,9 +196,12 @@ public final class Territory {
 			int dz = Math.max(0, Math.max(MapPixels.worldZ(map, pz) - z, z - (MapPixels.worldZ(map, pz) + scale - 1)));
 			int start = (int) Math.round(Math.sqrt((double) dx * dx + (double) dz * dz) * 10);
 			int index = px + pz * Ink.SIZE;
-			if (start <= limit && start < cost[index] && (start == 0 || isLand(map, index))) {
+			if (claimed[index] && (owners[index] & 0xFF) != nation) {
+				continue;
+			}
+			if (start <= limit && start < cost[index] && (start == 0 || claimed[index] || isLand(map, index))) {
 				cost[index] = start;
-				owners[index] = (byte) (int) nation;
+				owners[index] = (byte) nation;
 				queue.add(new long[] {start, index});
 			}
 		}
@@ -176,7 +225,8 @@ public final class Territory {
 						continue;
 					}
 					int neighbor = nx + ny * Ink.SIZE;
-					if (!isLand(map, neighbor)) {
+					// A nation's reach crosses its own walked bounds, water and all, and stops at anyone else's.
+					if (claimed[neighbor] ? owners[neighbor] != owners[index] : !isLand(map, neighbor)) {
 						continue;
 					}
 					// A diagonal step goes 1.4 times as far.
@@ -198,7 +248,22 @@ public final class Territory {
 			}
 			any |= owners[i] != 0;
 		}
-		return any ? new Territory(owners, List.copyOf(colors)) : NONE;
+		return any ? new Territory(owners, List.copyOf(colors), List.copyOf(designs)) : NONE;
+	}
+
+	/** The number a post's nation holds pixels with, counted from 1, or 0 if there are too many nations to tell apart. */
+	private static int nation(Post post, Map<String, Integer> nations, List<DyeColor> colors, List<String> designs) {
+		Integer nation = nations.get(post.design());
+		if (nation == null) {
+			if (colors.size() >= 255) {
+				return 0;
+			}
+			colors.add(post.color());
+			designs.add(post.design());
+			nation = colors.size();
+			nations.put(post.design(), nation);
+		}
+		return nation;
 	}
 
 	/**

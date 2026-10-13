@@ -3,10 +3,12 @@ package com.assilf.mapplus;
 import com.assilf.mapplus.atlas.AtlasManager;
 import com.assilf.mapplus.ink.CauldronWashing;
 import com.assilf.mapplus.ink.FramePainting;
+import com.assilf.mapplus.ink.Sketching;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkSupply;
 import com.assilf.mapplus.ink.MapViewers;
 import com.assilf.mapplus.ink.MarkManager;
+import com.assilf.mapplus.nation.Marches;
 import com.assilf.mapplus.nation.Nations;
 import com.assilf.mapplus.net.AtlasPagePayload;
 import com.assilf.mapplus.net.InkLayerPayload;
@@ -15,6 +17,7 @@ import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MapMarksPayload;
 import com.assilf.mapplus.net.MapInkPayload;
 import com.assilf.mapplus.net.MarkEditPayload;
+import com.assilf.mapplus.net.SketchPayload;
 import com.assilf.mapplus.survey.CaveMaps;
 import com.assilf.mapplus.survey.SpyglassSurvey;
 import net.fabricmc.api.ModInitializer;
@@ -44,6 +47,7 @@ public class MapPlus implements ModInitializer {
 		PayloadTypeRegistry.serverboundPlay().register(InkStrokePayload.TYPE, InkStrokePayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(AtlasPagePayload.TYPE, AtlasPagePayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(MarkEditPayload.TYPE, MarkEditPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(SketchPayload.TYPE, SketchPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(MapMarksPayload.TYPE, MapMarksPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkLayerPayload.TYPE, InkLayerPayload.CODEC);
@@ -55,8 +59,10 @@ public class MapPlus implements ModInitializer {
 		CauldronWashing.register();
 		SpyglassSurvey.register();
 		Nations.register();
+		Marches.register();
 		CaveMaps.register();
 		FramePainting.register();
+		Sketching.register();
 		AtlasManager.register();
 	}
 

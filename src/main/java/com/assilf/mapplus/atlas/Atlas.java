@@ -32,13 +32,17 @@ import java.util.Optional;
  * <p>Pages come in spreads, as in an open book: pages 0 and 1, 2 and 3, and so
  * on. A map page faces the other page of its spread, where its notes go.
  *
+ * <p>Any page that isn't a map's may hold a {@link Sketch} instead of text, so
+ * a book and quill with sketches and no maps is a sketchbook.
+ *
  * @param plates   the stitched maps
  * @param selected the map page that explores while the atlas is held, or -1
+ * @param sketches the sketched pages
  */
-public record Atlas(List<Plate> plates, int selected) {
+public record Atlas(List<Plate> plates, int selected, List<Sketch> sketches) {
 	public static final String KEY = "mapplus:atlas";
 	private static final int VERSION = 2;
-	public static final Atlas EMPTY = new Atlas(List.of(), -1);
+	public static final Atlas EMPTY = new Atlas(List.of(), -1, List.of());
 
 	/**
 	 * One stitched map.
@@ -91,11 +95,17 @@ public record Atlas(List<Plate> plates, int selected) {
 	public static final Codec<Atlas> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 			Codec.INT.optionalFieldOf("version", VERSION).forGetter(atlas -> VERSION),
 			Plate.CODEC.listOf().optionalFieldOf("maps", List.of()).forGetter(Atlas::plates),
-			Codec.INT.optionalFieldOf("selected", -1).forGetter(Atlas::selected)
-	).apply(instance, (version, plates, selected) -> new Atlas(plates, selected)));
+			Codec.INT.optionalFieldOf("selected", -1).forGetter(Atlas::selected),
+			Sketch.CODEC.listOf().optionalFieldOf("sketches", List.of()).forGetter(Atlas::sketches)
+	).apply(instance, (version, plates, selected, sketches) -> new Atlas(plates, selected, sketches)));
 
 	public Atlas {
 		plates = List.copyOf(plates);
+		sketches = List.copyOf(sketches);
+	}
+
+	public Atlas(List<Plate> plates, int selected) {
+		this(plates, selected, List.of());
 	}
 
 	public static boolean isBook(ItemStack stack) {
@@ -178,16 +188,46 @@ public record Atlas(List<Plate> plates, int selected) {
 	}
 
 	public Atlas withSelected(int page) {
-		return new Atlas(plates, page);
+		return new Atlas(plates, page, sketches);
 	}
 
-	/** How many pages the book needs so that every map has the other page of its spread. */
+	/** The sketch on a page, or null. */
+	public Sketch sketchAt(int page) {
+		for (Sketch sketch : sketches) {
+			if (sketch.page() == page) {
+				return sketch;
+			}
+		}
+		return null;
+	}
+
+	/** The atlas with a page's sketch replaced; a blank sketch takes the page's sketch away. */
+	public Atlas withSketch(Sketch sketch) {
+		List<Sketch> changed = new ArrayList<>();
+		for (Sketch old : sketches) {
+			if (old.page() != sketch.page()) {
+				changed.add(old);
+			}
+		}
+		if (!sketch.isBlank()) {
+			changed.add(sketch);
+		}
+		return new Atlas(plates, selected, changed);
+	}
+
+	/**
+	 * How many pages the book needs so that every map has the other page of its
+	 * spread, and every sketch its page.
+	 */
 	public int requiredPages() {
 		int required = 0;
 		for (Plate plate : plates) {
 			if (plate.page() >= 0) {
 				required = Math.max(required, (plate.page() | 1) + 1);
 			}
+		}
+		for (Sketch sketch : sketches) {
+			required = Math.max(required, sketch.page() + 1);
 		}
 		return required;
 	}
@@ -230,7 +270,7 @@ public record Atlas(List<Plate> plates, int selected) {
 		out.set(DataComponents.WRITABLE_BOOK_CONTENT, content.withReplacedPages(pages));
 		List<Plate> plates = new ArrayList<>(atlas.plates());
 		plates.add(Plate.bound(map, mapPage, registries));
-		new Atlas(plates, atlas.selected()).write(out);
+		new Atlas(plates, atlas.selected(), atlas.sketches()).write(out);
 		if (!out.has(DataComponents.CUSTOM_NAME)) {
 			out.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("item.mapplus.atlas", "Atlas"));
 		}

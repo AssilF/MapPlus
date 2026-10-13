@@ -51,8 +51,22 @@ public final class MapPlusConfig {
 	public int postReach = 48;
 	/** Whether maps show nations' borders and land. */
 	public boolean nationsOnMaps = true;
+	/**
+	 * Whether a map shows a nation's land only once the nation's banner is on it:
+	 * marked by using the map on one of its posts, or pinned at the table.
+	 */
+	public boolean bordersNeedBanners = true;
+	/** Whether banners can be worn on the head, as raid captains wear them. */
+	public boolean wearableBanners = true;
+	/** How far a worn named banner remembers the bounds it walks, in blocks; 0 turns marching off. */
+	public int boundsLength = 2048;
 	/** Whether players are told in the action bar when they cross a border. */
 	public boolean nationMessages = true;
+
+	/** Whether a book and quill can be sketched in, holding ink in the other hand. */
+	public boolean sketching = true;
+	/** How many pages of one book can hold sketches. */
+	public int sketchPages = 16;
 
 	/** Whether a map in an item frame can be painted where it hangs, with a pen in one hand and ink in the other. */
 	public boolean framePainting = true;
@@ -93,9 +107,12 @@ public final class MapPlusConfig {
 		config.surveyRangeMultiplier = Math.max(1.0, config.surveyRangeMultiplier);
 		config.surveyChunksPerTick = Math.max(0, config.surveyChunksPerTick);
 		config.postReach = Math.clamp(config.postReach, 1, 1024);
+		// A march no longer than this closes in no more land than one claim can hold.
+		config.boundsLength = Math.clamp(config.boundsLength, 0, 4096);
 		config.caveMapReach = Math.clamp(config.caveMapReach, 1, 64);
 		config.echoReach = Math.clamp(config.echoReach, 1, 64);
 		config.echoCooldown = Math.max(0, config.echoCooldown);
+		config.sketchPages = Math.clamp(config.sketchPages, 0, 50);
 		// Together they stay within what one map's marks packet can carry.
 		config.maxLabelsPerMap = Math.clamp(config.maxLabelsPerMap, 0, 512);
 		config.maxPinsPerMap = Math.clamp(config.maxPinsPerMap, 0, 512);

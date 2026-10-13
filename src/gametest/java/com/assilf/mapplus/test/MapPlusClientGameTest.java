@@ -1,12 +1,15 @@
 package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.atlas.Atlas;
+import com.assilf.mapplus.atlas.Sketch;
+import com.assilf.mapplus.client.atlas.SketchBookScreen;
 import com.assilf.mapplus.client.foresight.Projection;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
 import com.assilf.mapplus.ink.Mark;
+import com.assilf.mapplus.nation.Bounds;
 import com.assilf.mapplus.nation.NationData;
 import com.assilf.mapplus.nation.Post;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -160,8 +163,9 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				throw new AssertionError("The fill should tint the fenced plot at half strength and nothing outside it");
 			}
 
-			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon, and a
-			// nation whose border post stands to the east.
+			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon, a
+			// nation whose border post stands to the east, marked on the map, and the dashed bounds the banner worn on the
+			// player's head has walked.
 			server.runOnServer(minecraft -> {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 				player.closeContainer();
@@ -169,6 +173,14 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				BlockPos post = player.blockPosition().east(24);
 				player.level().setBlockAndUpdate(post, ((BlockItem) Items.BANNER.pick(DyeColor.BLUE)).getBlock().defaultBlockState());
 				NationData.get(minecraft).put(new Post(player.level().dimension(), post, DyeColor.BLUE, List.of(), "Blueland"));
+				player.level().getMapData(explored.get(DataComponents.MAP_ID)).toggleBanner(player.level(), post);
+				ItemStack worn = new ItemStack(Items.BANNER.pick(DyeColor.LIME));
+				worn.set(DataComponents.CUSTOM_NAME, Component.literal("Limeland"));
+				BlockPos at = player.blockPosition();
+				Bounds.start(player.level().dimension(), "Limeland", at.getX() - 30, at.getZ() - 10, false)
+						.to(at.getX() - 6, at.getZ() - 30, 32).to(at.getX() + 10, at.getZ() - 4, 32).to(at.getX() - 10, at.getZ() + 20, 32)
+						.closedAtStart().write(worn);
+				player.setItemSlot(EquipmentSlot.HEAD, worn);
 			});
 			context.waitTicks(25);
 			context.getInput().lookAt(0, 70);
@@ -290,7 +302,78 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.takeScreenshot("atlas_signed");
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(2);
+
+			// A sketchbook: a book and quill with green dye in the other hand; the quill draws on the empty second page.
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				ItemStack book = new ItemStack(Items.WRITABLE_BOOK);
+				book.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(
+						Filterable.passThrough("The watchtower\n\nSketched from the hill, facing north."))));
+				player.setItemInHand(InteractionHand.MAIN_HAND, book);
+				player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.DYE.pick(DyeColor.GREEN), 16));
+			});
+			context.waitTicks(5);
+			context.getInput().pressKey(options -> options.keyUse);
+			context.waitForScreen(BookEditScreen.class);
+			context.waitTicks(3);
+			context.getInput().pressKey(InputConstants.KEY_PAGEDOWN);
+			context.waitTicks(3);
+			// A tower: its walls, its roof, and a door.
+			sketch(context, 40, 110, 40, 40);
+			sketch(context, 40, 40, 74, 40);
+			sketch(context, 74, 40, 74, 110);
+			sketch(context, 34, 40, 57, 12);
+			sketch(context, 57, 12, 80, 40);
+			sketch(context, 52, 110, 52, 90);
+			sketch(context, 52, 90, 62, 90);
+			sketch(context, 62, 90, 62, 110);
+			context.waitTicks(10);
+			context.takeScreenshot("sketch_drawn");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitTicks(10);
+			int[] kept = server.computeOnServer(minecraft -> {
+				ItemStack book = minecraft.getPlayerList().getPlayers().getFirst().getMainHandItem();
+				Sketch sketch = Atlas.read(book).map(atlas -> atlas.sketchAt(1)).orElse(null);
+				int pages = book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY).pages().size();
+				return new int[] {sketch == null ? 0 : 1, pages};
+			});
+			if (kept[0] != 1 || kept[1] != 2) {
+				throw new AssertionError("The sketch should be kept on the book's second page, found sketch " + kept[0] + " with " + kept[1] + " pages");
+			}
+			// Opened again, the sketch faces its notes as it was drawn.
+			context.getInput().pressKey(options -> options.keyUse);
+			context.waitForScreen(BookEditScreen.class);
+			context.waitTicks(3);
+			context.getInput().pressKey(InputConstants.KEY_PAGEDOWN);
+			context.waitTicks(3);
+			context.takeScreenshot("sketch_reopened");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitTicks(2);
 		}
+	}
+
+	/** Draws a line with the quill on the open book's page, from one point of its writing area to another. */
+	private static void sketch(ClientGameTestContext context, int x0, int y0, int x1, int y1) {
+		int steps = 8;
+		for (int i = 0; i <= steps; i++) {
+			int x = x0 + (x1 - x0) * i / steps;
+			int y = y0 + (y1 - y0) * i / steps;
+			double[] at = context.computeOnClient(client -> {
+				if (!(client.gui.screen() instanceof SketchBookScreen book)) {
+					throw new AssertionError("The book and quill should be open");
+				}
+				double scale = scale(client);
+				return new double[] {(book.mapplus$writingX() + x + 0.5) * scale, (book.mapplus$writingY() + y + 0.5) * scale};
+			});
+			context.getInput().setCursorPos(at[0], at[1]);
+			context.waitTick();
+			if (i == 0) {
+				context.getInput().holdMouse(InputConstants.MOUSE_BUTTON_LEFT);
+				context.waitTick();
+			}
+		}
+		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(2);
 	}
 
 	/** A map of the area around the player, filled in as if they had walked around with it. */
