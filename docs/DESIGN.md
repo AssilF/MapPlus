@@ -197,7 +197,9 @@ While looking through a spyglass with a map in the other hand:
 
 Planned from playtesting feedback. Each part starts with what was asked and
 what changed after review, then the design. **Built so far:** tools on the
-cursor, labels, pins and borders (the planning desk), and owned seals; see
+cursor, labels, pins and borders (the planning desk), owned seals, watering
+down and tints, sherd icons, banner designs, sizes and paper canvases; see
+[Built: tints and icons](#built-tints-and-icons) and
 [Built: the planning desk](#built-the-planning-desk) for where the build
 differs from the plan.
 
@@ -624,12 +626,55 @@ takes ink from a hand. Effort: medium.
 ### Order
 
 1. ~~Tools on the cursor~~ (built)
-2. ~~Labels, pins and borders, unlocked by a loom~~ (built); zones next
-3. Choosing the page and cutting maps out, with the book on the desk
-4. Painting framed maps
-5. One ink file per map, then watering down
-6. Sketches: in the hand with the quill only; at the table, on the book on the
-   desk, with all the table's tools
+2. ~~Labels, pins and borders, unlocked by a loom~~ (built)
+3. ~~Watering down, tints, sherd icons, banner designs, sizes, paper canvases~~
+   (built; see [Built: tints and icons](#built-tints-and-icons))
+4. Choosing the page and cutting maps out, with the book on the desk
+5. Atlases shown like maps: held, the open spread's map shows as a held map
+   does; in an item frame, the open map shows as a framed map does
+6. Painting framed maps (on by default, open to players without the mod)
+7. One ink file per map
+8. Sketches: in the hand with the quill only; at the table, on the book on the
+   desk, with all the table's tools. A sketch fills the page's writing area as
+   a vanilla book lays it out, so it sits where text would.
+
+### Built: tints and icons
+
+From playtesting on a server, and where it differs from the plan above:
+
+- **Typing labels works with a real keyboard.** Since 26.x, keyboard text only
+  reaches the game while text input is on, as it is for a focused text box; the
+  desk turns it on while a label is typed. (Tests type straight into the screen,
+  which is why they passed.) While typing, the label's size shows under it, and
+  ↑ ↓ size it as scrolling does.
+- **Strength is scrolled, not Shift.** Scrolling over the map with a drawing
+  tool picks full, ¾, ½ or ¼; a tooltip says which, and the preview under the
+  cursor shows it. It's kept from table to table. A stroke sets pixels to that
+  strength: over ink of the same color it only ever makes it stronger, over
+  another color it recolors at that strength. With water, full erases and any
+  lower strength fades a step. Watered dye costs that share of a pixel's ink.
+- **True tints for players with the mod.** The server leaves watered ink out of
+  the pixels it sends them and sends it on its own (`MapTintsPayload`,
+  compressed, when the ink changes); their game blends it over the map's colors
+  when it makes the map's picture, so terrain shows through in its own colors.
+  Players without the mod get the 2×2 pattern. Ink keeps the normal shade
+  (taking the terrain's shade is left for later).
+- **The bucket floods by color and strength,** so a tinted plot fills apart
+  from its border, and re-filling it at another strength changes the tint.
+- **Cauldron dips fade** ink, labels and icons a step; pins stay.
+- **Pottery sherds stamp icons:** the sherd's picture is cut out of its pot
+  texture (the pixels darker than the pot around them) and drawn in the dye's
+  color, named with the sherd's anvil name. Costs 8, 16 or 32 pixels of ink.
+  Counted with pins against `maxPinsPerMap`. A ninth rack slot; the desk is 16
+  pixels wider.
+- **Pins show their banner:** the front of the banner's flag, with its
+  patterns, made from the game's own textures (so resource packs apply).
+- **Sizes:** scroll over a mark with its tool to size it. Growing a label or
+  icon costs the difference, in its own ink; shrinking is free.
+- **Players with the mod draw all marks themselves;** the server no longer sends
+  them pins as vanilla markers. Players without the mod see every mark as a
+  named banner marker.
+- **Paper is a blank canvas,** like an empty map.
 
 ### Built: the planning desk
 
@@ -781,7 +826,12 @@ original leads". Kept out of the main mod; may become a parallel variant.
   of buttons.
 - Framed maps can be painted where they hang (planned), but only freehand: fill,
   box, sealing, stitching and canvases stay at the table.
-- Watered-down ink is a fixed checkerboard pattern, never a blended color.
+- Watered-down ink is blended over the map by players with the mod, and shown
+  as a fixed pattern of ink and map to players without it: everyone sees a tint,
+  and nobody sees a hue that isn't there.
+- A water cauldron waters a map down a step per dip; four dips wash full ink off.
+- Framed-map painting is on by default and open to players without the mod.
+- Paper is a blank canvas at the table, as an empty map is.
 - Text on maps is stored as text (labels), written with a sign.
 - Sketches are page drawings in the book, never maps.
 - Foresight is treasure-only.
@@ -800,11 +850,8 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - Should seals be owned, so only the sealer, the map's maker or an operator can
   scrape them off? Planned: yes (`sealsAreOwned`), unlike vanilla wax, because a
   copy of a map reaches every other copy and a sign never does.
-- A cauldron dip waters a map down one step instead of washing it clean in one
-  go. Planned: yes, four dips to clean.
-- Framed-map painting on by default, and open to players without the mod?
-  Planned: yes to both.
-- Sketch size (60×60) and cap (16 pages per book).
+- Sketch cap (16 pages per book). Size: decided, the page's own writing area,
+  as a vanilla book lays it out (see Sketches).
 
 ## To verify on 26.3
 

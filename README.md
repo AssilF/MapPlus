@@ -8,7 +8,8 @@ A Fabric mod for Minecraft 26.3 that extends vanilla cartography for planning bu
 With the mod on both sides, the cartography table window gets a drawing desk on its right: the map in the top slot, at full size, to draw on directly.
 
 - **What draws is what's in the second slot:** a dye draws in its color (an ink sac draws black), a glow ink sac makes ink glow, a water bottle erases. One item covers 256 pixels; the bar on the item shows what's left of it.
-- **Empty map:** put an empty map in the top slot to draw on a blank canvas. The drawing is the result; taking it uses up one empty map. Closing the table gives you the drawing in place of that empty map, so nothing you paid ink for is lost.
+- **Blank canvas:** put an empty map or a sheet of paper in the top slot to draw on a blank canvas. The drawing is the result; taking it uses up one empty map or paper. Closing the table gives you the drawing in its place, so nothing you paid ink for is lost.
+- **Water the ink down:** scroll over the map with a drawing tool to draw at full, ¾, ½ or ¼ strength: watered ink tints the map instead of covering it, and costs that share of a pixel's ink. Fill a fenced plot at ¼ to tint it as a zone. Watered ink never weakens ink of its own color; a water bottle at a lower strength fades ink a step instead of erasing it. Players without the mod see tints as a fine pattern over the map.
 - **Tools are items:** pick one up and draw on the map with it. The rack under the map picks your tools up from your inventory in one click.
 
   | On the cursor | Tool |
@@ -21,19 +22,20 @@ With the mod on both sides, the cartography table window gets a drawing desk on 
 - **Seal:** honeycomb in the second slot seals a map's ink against drawing and washing; an axe scrapes the seal off (and takes damage). On servers, only whoever sealed the map, the map's maker or an operator can scrape it off (for maps made since MapPlus was installed).
 - Shift-click dyes, ink sacs, water bottles, honeycomb, axes and books into the second slot.
 - Locking a map (glass pane) keeps its ink; zooming it out (paper) shrinks the ink onto the bigger map.
-- Use a map on a water cauldron to wash all its ink and labels off.
+- Use a map on a water cauldron to water all its ink, labels and icons down a step; four dips wash full ink off.
 - Every copy of a map shows the same ink, including maps in item frames, and players without the mod see it too.
 
-### Planning: labels, pins and borders
+### Planning: labels, pins, icons and borders
 Place a **loom next to the cartography table** to mark maps up for planning: your turf, your city's districts, its roads.
 
-- **Sign:** click the map and type a label, in the color of the dye in the second slot. Scroll while typing to make it smaller or larger, press Enter to place it. Letters cost ink.
-- **Banner:** pin it to the map. It shows as the banner's marker, with the banner's name if you named it in an anvil.
+- **Sign:** click the map and type a label, in the color of the dye in the second slot. Scroll or press ↑ ↓ while typing to size it (small, medium or large), Enter to place it. Letters cost ink.
+- **Banner:** pin it to the map. It shows as the banner itself, with its patterns, named with the banner's anvil name if it has one.
+- **Pottery sherd:** stamp its picture as an icon, in the dye's color: the skull sherd for danger, the miner's pickaxe for a mine, the sheaf for farms, plenty's chest for storage. Named with the sherd's anvil name if it has one. Icons cost a little ink.
 - **Iron chain:** draw a dashed border.
-- Drag a label or pin to move it, or drag it off the map to remove it. Click a label with a sign to rewrite it.
-- Labels and pins show on every copy of the map, held, framed and in atlases. Players without the mod see them as named banner markers.
+- Drag a mark to move it, scroll over it to size it, or drag it off the map to remove it. Click a label with a sign to rewrite it.
+- Marks show on every copy of the map, held, framed and in atlases. Players without the mod see them as named banner markers.
 
-For example, to mark your turf: draw its border with an iron chain, fill it with the bucket if you like, write its name with a sign, and pin your banner.
+For example, to mark your turf: draw its border with an iron chain, tint it by filling it with the bucket at ¼ strength, write its name with a sign, and pin your banner.
 
 ### Atlas
 Put a filled map in the cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with the map stitched in as its next page. Stitch more maps the same way, with the atlas in the second slot. The maps are used up and can't be taken back out.
@@ -62,11 +64,11 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `inkPerItem` | 256 | Pixels drawn per dye or ink sac |
 | `waterPerBottle` | 256 | Pixels erased per water bottle |
 | `creativeInkIsFree` | true | Drawing costs nothing in creative |
-| `markingNeedsLoom` | true | Labels, pins and borders need a loom next to the table |
+| `markingNeedsLoom` | true | Labels, pins, icons and borders need a loom next to the table |
 | `maxLabelsPerMap` | 32 | Labels one map can carry |
-| `maxPinsPerMap` | 32 | Pins one map can carry |
+| `maxPinsPerMap` | 32 | Pins and icons one map can carry |
 | `sealsAreOwned` | true | Only the sealer, the map's maker or an operator can scrape a seal off |
-| `logMarks` | true | Log each label and pin placed or removed, and who did it |
+| `logMarks` | true | Log each label, pin and icon placed or removed, and who did it |
 | `spyglassSurvey` | true | Spyglass fills held maps |
 | `surveyPixelsPerTick` | 48 | Map pixels surveyed per tick per player |
 | `surveyRangeMultiplier` | 2.0 | Survey range, as a multiple of the view distance |
