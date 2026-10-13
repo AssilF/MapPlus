@@ -39,7 +39,7 @@ public final class MarkManager {
 
 	public static void register() {
 		ServerPlayNetworking.registerGlobalReceiver(MarkEditPayload.TYPE, (payload, context) -> {
-			if (InkManager.acknowledge(context.player(), payload.seq())
+			if (InkManager.acknowledge(context.player(), payload.seq()) && InkManager.allowMark(context.player())
 					&& context.player().containerMenu instanceof CartographyTableMenu menu) {
 				edit(context.player(), menu, context.player().level(), payload);
 			}

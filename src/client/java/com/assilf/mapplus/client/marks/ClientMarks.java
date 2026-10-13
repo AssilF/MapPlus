@@ -14,6 +14,7 @@ import java.util.Map;
  */
 public final class ClientMarks {
 	private static final Map<Integer, List<Mark>> MARKS = new HashMap<>();
+	private static final Map<Integer, Integer> UPDATES = new HashMap<>();
 	/** A label being edited at the desk, not drawn on the map meanwhile. */
 	private static int hiddenMap = -1;
 	private static int hiddenMark = -1;
@@ -28,6 +29,7 @@ public final class ClientMarks {
 		} else {
 			MARKS.put(payload.mapId(), List.copyOf(payload.marks()));
 		}
+		UPDATES.merge(payload.mapId(), 1, Integer::sum);
 		updates++;
 	}
 
@@ -35,9 +37,12 @@ public final class ClientMarks {
 		return mapId == null ? List.of() : MARKS.getOrDefault(mapId.id(), List.of());
 	}
 
-	/** Counts the updates received, so the desk knows when its edit has come back. */
-	public static int updates() {
-		return updates;
+	/**
+	 * Counts the updates received for a map, so the desk knows when its edit has
+	 * come back; for a map not made yet (a negative id), counts all updates.
+	 */
+	public static int updates(int mapId) {
+		return mapId < 0 ? updates : UPDATES.getOrDefault(mapId, 0);
 	}
 
 	public static void hide(MapId mapId, int markId) {
@@ -56,6 +61,7 @@ public final class ClientMarks {
 
 	public static void clear() {
 		MARKS.clear();
+		UPDATES.clear();
 		unhide();
 	}
 }

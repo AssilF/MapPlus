@@ -112,11 +112,18 @@ public final class InkData extends SavedData {
 		}
 	}
 
-	/** Seals a map's ink and marks, remembering who sealed it. */
+	/**
+	 * Seals a map's ink and marks, remembering who sealed it. A seal only gets an
+	 * owner on a map whose maker is known, so someone with a copy of an older map
+	 * can't lock its maker out; and a map already sealed keeps its seal's owner.
+	 */
 	public void seal(MapId mapId, UUID sealer) {
 		InkLayer layer = getOrCreate(mapId);
+		if (layer.isSealed()) {
+			return;
+		}
 		layer.setSealed(true);
-		layer.setSealer(sealer);
+		layer.setSealer(maker(mapId) != null ? sealer : null);
 		setDirty();
 	}
 

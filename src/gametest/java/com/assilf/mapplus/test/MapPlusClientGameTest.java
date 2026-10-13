@@ -2,6 +2,7 @@ package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -74,7 +75,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			// The drawing desk with an explored map and red dye, and a loom next to it.
 			server.runOnServer(minecraft -> openTable(minecraft, menu -> {
 				menu.getSlot(CartographyTableMenu.MAP_SLOT).set(explored.copy());
-				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 16));
+				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 32));
 			}));
 			context.waitForScreen(CartographyTableScreen.class);
 			context.waitTicks(10);
@@ -92,10 +93,15 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.waitTicks(2);
 			context.takeScreenshot("desk_tool_tooltip");
 
-			// Marking up: a dashed border, the box filled, a label typed with a sign and a banner pinned.
+			// Marking up: a plot fenced with a dashed border and filled, the box filled, a label typed with a sign and a banner pinned.
 			clickTool(context, CHAIN);
-			drag(context, 10, 125, 118, 125);
+			drag(context, 4, 70, 26, 70);
+			drag(context, 26, 70, 26, 122);
+			drag(context, 26, 122, 4, 122);
+			drag(context, 4, 122, 4, 70);
 			clickTool(context, BUCKET);
+			context.waitTicks(5);
+			clickCanvas(context, 15, 95);
 			clickCanvas(context, 60, 100);
 			clickTool(context, SIGN);
 			clickCanvas(context, 60, 30);
@@ -112,6 +118,18 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			});
 			if (marks != 2) {
 				throw new AssertionError("Expected a label and a pin on the map, found " + marks + " marks");
+			}
+			// The fill stays inside the dashed border: nothing leaks out through the gaps between its dashes.
+			boolean[] fill = server.computeOnServer(minecraft -> {
+				InkLayer layer = InkData.get(minecraft).find(exploredId);
+				return new boolean[] {
+						layer != null && Ink.isPresent(layer.get(15 + 95 * Ink.SIZE)),
+						layer != null && Ink.isPresent(layer.get(1 + 95 * Ink.SIZE)),
+						layer != null && Ink.isPresent(layer.get(15 + 126 * Ink.SIZE))
+				};
+			});
+			if (!fill[0] || fill[1] || fill[2]) {
+				throw new AssertionError("The fill should cover the fenced plot and nothing outside it");
 			}
 
 			// An empty map is a blank canvas; the drawing is the result.

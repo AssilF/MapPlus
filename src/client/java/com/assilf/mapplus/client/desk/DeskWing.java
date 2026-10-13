@@ -100,8 +100,13 @@ public final class DeskWing {
 	/** The line, box or border being dragged out. */
 	private final BitSet shape = new BitSet(Ink.PIXELS);
 
-	/** The label or pin being dragged, where to, and whether it has moved yet. */
+	/** The mouse button pressed on the desk; its drag and release belong to the desk too. */
+	private int pressButton = -1;
+
+	/** The label or pin being dragged, where it was grabbed, where to, and whether it has moved yet. */
 	private Mark dragged;
+	private int pressX;
+	private int pressY;
 	private int dragX;
 	private int dragY;
 	private boolean dragMoved;
@@ -114,6 +119,7 @@ public final class DeskWing {
 	private Mark pending;
 	private int pendingHidden = -1;
 	private int pendingSeq;
+	private int pendingMap;
 	private int pendingUpdates;
 	private int pendingTicks;
 
@@ -330,11 +336,13 @@ public final class DeskWing {
 			Labels.draw(graphics, pending.text(), pending.x(), pending.y(), pending.size(), Labels.color(pending.color()));
 		}
 		if (dragged != null && dragMoved) {
+			int x = Mark.clampPixel(dragged.x() + dragX - pressX);
+			int y = Mark.clampPixel(dragged.y() + dragY - pressY);
 			if (dragged.isLabel()) {
-				Labels.draw(graphics, dragged.text(), Mark.clampPixel(dragX), Mark.clampPixel(dragY), dragged.size(), Labels.color(dragged.color()));
+				Labels.draw(graphics, dragged.text(), x, y, dragged.size(), Labels.color(dragged.color()));
 			} else {
 				graphics.pose().pushMatrix();
-				graphics.pose().translate(dragX - 3, dragY - 4);
+				graphics.pose().translate(x - 3, y - 4);
 				graphics.pose().scale(0.5F, 0.5F);
 				graphics.item(icon(InkTool.PIN), 0, 0);
 				graphics.pose().popMatrix();
@@ -482,6 +490,16 @@ public final class DeskWing {
 			click(empty, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
 			return;
 		}
+		ItemStack carried = menu().getCarried();
+		if (!carried.isEmpty() && InkTool.of(carried) == null) {
+			// Anything else in hand is put down first, so it can't take the tool in, as a bundle would.
+			int empty = emptyInventorySlot();
+			if (empty < 0) {
+				deny();
+				return;
+			}
+			click(empty, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
+		}
 		int slot = inventorySlot(tool);
 		if (slot >= 0) {
 			click(slot, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
@@ -512,6 +530,8 @@ public final class DeskWing {
 			}
 			return false;
 		}
+		// A press on the desk keeps its drag and release, even if they end outside the window, so a tool is never thrown.
+		pressButton = button;
 		if (button != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
 		}
@@ -593,14 +613,17 @@ public final class DeskWing {
 	}
 
 	public boolean mouseDragged(double mouseX, double mouseY, int button) {
+		if (pressButton < 0 || button != pressButton) {
+			return false;
+		}
 		if (dragged != null) {
 			dragX = pixelX(mouseX);
 			dragY = pixelY(mouseY);
-			dragMoved |= Math.abs(dragX - dragged.x()) > 1 || Math.abs(dragY - dragged.y()) > 1;
+			dragMoved |= Math.abs(dragX - pressX) > 1 || Math.abs(dragY - pressY) > 1;
 			return true;
 		}
 		if (stroke == null) {
-			return false;
+			return true;
 		}
 		// Far enough out to cover any drag, close enough that lines stay cheap.
 		int x = Math.clamp(pixelX(mouseX), -Ink.SIZE, Ink.SIZE * 2);
@@ -616,12 +639,16 @@ public final class DeskWing {
 	}
 
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		if (pressButton < 0 || button != pressButton) {
+			return false;
+		}
+		pressButton = -1;
 		if (dragged != null) {
 			finishDrag(mouseX, mouseY);
 			return true;
 		}
 		if (stroke == null) {
-			return false;
+			return true;
 		}
 		InkTool tool = stroke;
 		stroke = null;
@@ -647,7 +674,11 @@ public final class DeskWing {
 		int steps = (int) scrolled;
 		if (steps != 0) {
 			scrolled -= steps;
-			editing.size = Mark.clampSize(editing.size + steps);
+			int size = Mark.clampSize(editing.size + steps);
+			// A label never grows wider than the map.
+			if (Labels.width(editing.text.toString(), size) <= Labels.MAX_WIDTH) {
+				editing.size = size;
+			}
 		}
 		return true;
 	}
@@ -677,7 +708,9 @@ public final class DeskWing {
 			return false;
 		}
 		String typed = editing.text.toString();
-		if (event.isAllowedChatCharacter() && typed.codePointCount(0, typed.length()) < Mark.MAX_TEXT) {
+		String longer = typed + Character.toString(event.codepoint());
+		if (event.isAllowedChatCharacter() && typed.codePointCount(0, typed.length()) < Mark.MAX_TEXT
+				&& Labels.width(longer, editing.size) <= Labels.MAX_WIDTH) {
 			editing.text.appendCodePoint(event.codepoint());
 		}
 		return true;
@@ -701,7 +734,7 @@ public final class DeskWing {
 			ClientMarks.unhide();
 		}
 		if (pendingHidden >= 0 || pending != null) {
-			boolean answered = DeskState.get().ack() >= pendingSeq && ClientMarks.updates() != pendingUpdates;
+			boolean answered = DeskState.get().ack() >= pendingSeq && ClientMarks.updates(pendingMap) != pendingUpdates;
 			if (answered || --pendingTicks <= 0) {
 				pending = null;
 				pendingHidden = -1;
@@ -719,6 +752,7 @@ public final class DeskWing {
 	/** Sends what the pen drew, before the window tells the server it closed. */
 	public void close() {
 		flushPen();
+		pressButton = -1;
 		stroke = null;
 		shape.clear();
 		editing = null;
@@ -826,6 +860,8 @@ public final class DeskWing {
 
 	private void startDrag(Mark mark, int x, int y) {
 		dragged = mark;
+		pressX = x;
+		pressY = y;
 		dragX = x;
 		dragY = y;
 		dragMoved = false;
@@ -852,8 +888,10 @@ public final class DeskWing {
 			pendingHidden = mark.id();
 			return;
 		}
-		int x = mark.isLabel() ? Labels.clampX(mark.text(), mark.size(), dragX) : Mark.clampPixel(dragX);
-		int y = mark.isLabel() ? Labels.clampY(mark.size(), dragY) : Mark.clampPixel(dragY);
+		int toX = mark.x() + dragX - pressX;
+		int toY = mark.y() + dragY - pressY;
+		int x = mark.isLabel() ? Labels.clampX(mark.text(), mark.size(), toX) : Mark.clampPixel(toX);
+		int y = mark.isLabel() ? Labels.clampY(mark.size(), toY) : Mark.clampPixel(toY);
 		sendMark(MarkEditPayload.Action.MOVE, mark.id(), x, y, mark.size(), "");
 		if (mark.isLabel()) {
 			pending = mark.at(x, y);
@@ -893,7 +931,8 @@ public final class DeskWing {
 
 	private void sendMark(MarkEditPayload.Action action, int markId, int x, int y, int size, String text) {
 		pendingSeq = DeskState.nextSeq();
-		pendingUpdates = ClientMarks.updates();
+		pendingMap = target();
+		pendingUpdates = ClientMarks.updates(pendingMap);
 		pendingTicks = PENDING_TICKS;
 		ClientPlayNetworking.send(new MarkEditPayload(pendingSeq, target(), action, markId, x, y, size, text));
 		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));

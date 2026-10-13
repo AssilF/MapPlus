@@ -51,18 +51,35 @@ public final class InkManager {
 	private InkManager() {
 	}
 
-	/** At most this many strokes and mark edits from one player are applied per tick. */
-	private static final int EDITS_PER_TICK = 4;
+	/** Strokes and mark edits one player may send: four a tick on average, with room for bursts after lag. */
+	private static final double EDITS_PER_TICK = 4;
+	private static final double EDIT_BURST = 40;
+	/** Labels and pins placed, moved or removed: two a second, so logs and sounds can't be flooded. */
+	private static final double MARKS_PER_TICK = 0.1;
+	private static final double MARK_BURST = 6;
 
 	/** What a drawing player has been told so far. */
 	private static final class Session {
 		int ack;
 		InkStatePayload sent;
-		long tick;
-		int edits;
+		/** The table the player has open; a new one is told everything afresh. */
+		int menuId = -1;
+		/** Edits the player may still send, refilled every server tick. */
+		double edits = EDIT_BURST;
+		double marks = MARK_BURST;
+		int refilled;
 		/** The map whose ink was last sent, and the version sent. */
 		int layerMap = Integer.MIN_VALUE;
 		int layerVersion;
+
+		void refill(int now) {
+			int ticks = now - refilled;
+			if (ticks > 0) {
+				edits = Math.min(EDIT_BURST, edits + ticks * EDITS_PER_TICK);
+				marks = Math.min(MARK_BURST, marks + ticks * MARKS_PER_TICK);
+				refilled = now;
+			}
+		}
 	}
 
 	public static void register() {
@@ -84,18 +101,30 @@ public final class InkManager {
 
 	/**
 	 * Notes a stroke or mark edit as handled, so the client stops showing it as
-	 * pending. Returns false when the player sends more than a few a tick; those
-	 * are dropped.
+	 * pending. Returns false when the player sends far more than drawing ever
+	 * does; those are dropped.
 	 */
 	static boolean acknowledge(ServerPlayer player, int seq) {
 		Session session = session(player);
 		session.ack = Math.max(session.ack, seq);
-		long now = player.level().getGameTime();
-		if (session.tick != now) {
-			session.tick = now;
-			session.edits = 0;
+		// Counted in server ticks, which go on even while the game's tick is frozen.
+		session.refill(player.level().getServer().getTickCount());
+		if (session.edits < 1) {
+			return false;
 		}
-		return ++session.edits <= EDITS_PER_TICK;
+		session.edits--;
+		return true;
+	}
+
+	/** Whether a player may place, move or remove another label or pin now. */
+	static boolean allowMark(ServerPlayer player) {
+		Session session = session(player);
+		session.refill(player.level().getServer().getTickCount());
+		if (session.marks < 1) {
+			return false;
+		}
+		session.marks--;
+		return true;
 	}
 
 	/** Applies a stroke to the map on a drawing desk, paying for it from the desk's second slot. */
@@ -208,11 +237,17 @@ public final class InkManager {
 				Session session = SESSIONS.get(player.getUUID());
 				if (session != null) {
 					session.sent = null;
+					session.menuId = -1;
 					session.layerMap = Integer.MIN_VALUE;
 				}
 				continue;
 			}
 			Session session = session(player);
+			if (session.menuId != menu.containerId) {
+				session.menuId = menu.containerId;
+				session.sent = null;
+				session.layerMap = Integer.MIN_VALUE;
+			}
 			MapId mapId = DrawingDesk.shownMap(menu);
 			boolean sealed = false;
 			boolean scrapable = true;
@@ -239,7 +274,10 @@ public final class InkManager {
 					DrawingDesk.mayMark(menu),
 					scrapable
 			);
-			sendLayer(player, session, mapId, canvas);
+			// Only the fill tool needs the ink itself; it's sent while the bucket is in hand.
+			if (InkTool.of(menu.getCarried()) == InkTool.FILL) {
+				sendLayer(player, session, mapId, canvas);
+			}
 			// Sent after the map, so the client has the new pixels when it learns the stroke is done.
 			if (!state.equals(session.sent)) {
 				ServerPlayNetworking.send(player, state);

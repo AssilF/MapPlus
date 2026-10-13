@@ -71,8 +71,9 @@ public final class MapPlusConfig {
 		config.surveyPixelsPerTick = Math.max(0, config.surveyPixelsPerTick);
 		config.surveyRangeMultiplier = Math.max(1.0, config.surveyRangeMultiplier);
 		config.surveyChunksPerTick = Math.max(0, config.surveyChunksPerTick);
-		config.maxLabelsPerMap = Math.max(0, config.maxLabelsPerMap);
-		config.maxPinsPerMap = Math.max(0, config.maxPinsPerMap);
+		// Together they stay within what one map's marks packet can carry.
+		config.maxLabelsPerMap = Math.clamp(config.maxLabelsPerMap, 0, 512);
+		config.maxPinsPerMap = Math.clamp(config.maxPinsPerMap, 0, 512);
 		instance = config;
 
 		try {

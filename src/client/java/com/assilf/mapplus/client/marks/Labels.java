@@ -13,7 +13,32 @@ import java.util.List;
 
 /** How labels look on a map: plain text in the ink's own map color, centered on its spot. */
 public final class Labels {
+	/** The widest a label may be, in map pixels, so it always stays on the map. */
+	public static final float MAX_WIDTH = 126.0F;
+
 	private Labels() {
+	}
+
+	/**
+	 * Where and how big a label is drawn: at its size, but shrunk to fit if it's
+	 * wider than the map, and moved in so none of it hangs off the map.
+	 *
+	 * @param width the text's width in font pixels
+	 */
+	public record Fit(float scale, float x, float y, int width) {
+	}
+
+	public static Fit fit(String text, int size, int x, int y) {
+		int width = Minecraft.getInstance().font.width(text);
+		float scale = Mark.scale(size);
+		if (width * scale > MAX_WIDTH) {
+			scale = MAX_WIDTH / width;
+		}
+		float halfWidth = width * scale / 2;
+		float halfHeight = 4.5F * scale;
+		float centerX = Math.clamp(x + 0.5F, halfWidth + 1, 127 - halfWidth);
+		float centerY = Math.clamp(y + 0.5F, halfHeight + 1, 127 - halfHeight);
+		return new Fit(scale, centerX, centerY, width);
 	}
 
 	/** The labels to draw on a map, without one being edited. */
@@ -52,11 +77,11 @@ public final class Labels {
 	/** Draws a label in a GUI, with the map's top left corner at the pose's origin. */
 	public static void draw(GuiGraphicsExtractor graphics, String text, int x, int y, int size, int color) {
 		Font font = Minecraft.getInstance().font;
-		float scale = Mark.scale(size);
+		Fit fit = fit(text, size, x, y);
 		graphics.pose().pushMatrix();
-		graphics.pose().translate(x + 0.5F, y + 0.5F);
-		graphics.pose().scale(scale, scale);
-		graphics.text(font, text, -font.width(text) / 2, -4, color, false);
+		graphics.pose().translate(fit.x(), fit.y());
+		graphics.pose().scale(fit.scale(), fit.scale());
+		graphics.text(font, text, -fit.width() / 2, -4, color, false);
 		graphics.pose().popMatrix();
 	}
 }

@@ -35,10 +35,10 @@ public abstract class MapRendererMixin {
 		Font font = Minecraft.getInstance().font;
 		for (Mark label : ((LabelHolder) state).mapplus$labels()) {
 			FormattedCharSequence text = Component.literal(label.text()).getVisualOrderText();
-			float scale = Mark.scale(label.size());
+			Labels.Fit fit = Labels.fit(label.text(), label.size(), label.x(), label.y());
 			pose.pushPose();
-			pose.translate(label.x() + 0.5F, label.y() + 0.5F, -0.025F);
-			pose.scale(scale, scale, -1.0F);
+			pose.translate(fit.x(), fit.y(), -0.025F);
+			pose.scale(fit.scale(), fit.scale(), -1.0F);
 			pose.translate(0.0F, 0.0F, 0.1F);
 			collector.order(1).submitText(pose, -font.width(text) / 2.0F, -4.0F, text, false, Font.DisplayMode.NORMAL, light,
 					Labels.color(label.color()), 0, 0);
