@@ -27,6 +27,13 @@ With the mod on both sides, the cartography table window gets a drawing desk on 
 - Use a map on a water cauldron to water all its ink, labels and icons down a step; four dips wash full ink off.
 - Every copy of a map shows the same ink, including maps in item frames, and players without the mod see it too.
 
+### The drafting table
+Carry the maps of the land around the one on the table, and they lie around it. Click the little sheet button at the end of the rack, or hold Ctrl and scroll down over the map, and the desk zooms out to a sheet of three by three maps at a third of their size: the table's map in the middle, framed, and every map you carry that borders it (same scale, same dimension) in its place.
+
+- **Draw across them:** the feather, brush, string, item frame and chain draw straight across the sheet, so a road or a border runs on from one map into the next. Each map gets its part, paid for from the ink in the second slot. Sealed maps are left alone.
+- **Change maps:** with nothing on the cursor, click a map on the sheet to put it on the table; the table's map goes where it was in your inventory. Click the middle map, or scroll back up with Ctrl, to zoom back in.
+- Fills, labels, pins and icons work on one map at a time: zoom in to use them.
+
 ### Painting on the wall
 Hold a feather (or a brush, for a wider pen) in one hand and ink in the other, and use a map in an item frame on a wall: you paint it where it hangs instead of turning it. Hold use to paint strokes; sneak for a lighter coat. Costs ink as at the table, needs build rights, and works for players without the mod too.
 
@@ -73,8 +80,8 @@ Name a banner in an anvil and put it up: it's a border post of your nation. A na
 **Maps show the nations they know.** A map doesn't show every nation. Use the map on one of a nation's posts (the vanilla way to mark a banner on a map) or pin its banner at the table, and from then on the map shows that nation's land.
 
 ### Caves and the echo
-- **Cave maps:** use an empty map deep underground and you get a Cave Map: it draws what you see around you in the caves, at whatever level you're at, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself.
-- **The echo:** use an amethyst shard with a map in your other hand: it rings out with a peal of thunder, and the land around you fills in at once, even through rock: the caves at your level on a cave map, the surface on any other. An echo shard rings twice as far.
+- **Cave maps:** use an empty map deep underground and you get a Cave Map: it draws what you see around you in the caves, at the level you're at, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself. Like any map, what it has shown stays: going up or down later fills in only what it hasn't drawn yet.
+- **The echo:** use an amethyst shard with a map in your other hand: it rings out with a peal of thunder, and the land around you fills in at once, even through rock: the caves at your level on a cave map (where it's still blank), the surface on any other. An echo shard rings twice as far.
 
 ### Foresight
 A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon. Only you see it; nothing is placed in the world.

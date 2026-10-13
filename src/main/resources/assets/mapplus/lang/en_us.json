@@ -58,5 +58,13 @@
 	"mapplus.bounds.closed": "The bounds of %s are walked: plant the banner to claim them",
 	"mapplus.bounds.full": "The banner can't remember any more: head back to close the bounds of %s",
 	"mapplus.bounds.progress": "Bounds of %s: %s blocks walked, %s back to the start",
-	"mapplus.nation.claimed": "%s claims %s blocks of land"
+	"mapplus.nation.claimed": "%s claims %s blocks of land",
+	"mapplus.desk.sheet.out": "Lay out the maps around it",
+	"mapplus.desk.sheet.in": "Back to the map on the table",
+	"mapplus.desk.sheet.about": "The maps you carry that border this one lie around it, to draw across",
+	"mapplus.desk.sheet.none": "Put a map of somewhere on the table",
+	"mapplus.desk.sheet.keys": "Ctrl and the mouse wheel over the map zoom too",
+	"mapplus.desk.hint.sheet": "Click a map to put it on the table · Pick up a pen, string, frame or chain to draw across them",
+	"mapplus.desk.hint.sheet_empty": "Carry the maps of the land around this one, and they lie around it here",
+	"mapplus.desk.hint.sheet_zoom": "Zoom in to use this on one map"
 }

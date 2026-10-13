@@ -10,6 +10,10 @@ import net.minecraft.world.inventory.LecternMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.saveddata.maps.MapId;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import java.util.Arrays;
 
 /**
  * A cartography table used by a player who has the mod: besides vanilla's
@@ -66,6 +70,74 @@ public interface DrawingDesk {
 			return of(menu).mapplus$canvas();
 		}
 		return null;
+	}
+
+	/** The sheet's size: a map on the table and the maps around it, three by three. */
+	int SHEET = 3;
+
+	/**
+	 * The sheet a table's map lies in: the maps the player carries that border it,
+	 * of the same scale and in the same dimension, as they'd lie around it on the
+	 * table. Map ids row by row, north to south and west to east, with the table's
+	 * map in the middle; -1 where the player carries none. Empty without a map on
+	 * the table, and for drawings, which aren't anywhere.
+	 */
+	static int[] sheet(ServerLevel level, Player player, CartographyTableMenu menu) {
+		int[] sheet = new int[SHEET * SHEET];
+		Arrays.fill(sheet, -1);
+		ItemStack input = menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem();
+		MapId center = input.is(Items.FILLED_MAP) ? input.get(DataComponents.MAP_ID) : null;
+		MapItemSavedData home = center == null ? null : level.getMapData(center);
+		if (home == null || isDrawing(home)) {
+			return sheet;
+		}
+		sheet[SHEET * SHEET / 2] = center.id();
+		int span = Ink.SIZE << home.scale;
+		Inventory inventory = player.getInventory();
+		for (int i = 0; i < inventory.getContainerSize(); i++) {
+			ItemStack stack = inventory.getItem(i);
+			MapId mapId = stack.is(Items.FILLED_MAP) ? stack.get(DataComponents.MAP_ID) : null;
+			if (mapId == null || mapId.equals(center)) {
+				continue;
+			}
+			MapItemSavedData map = level.getMapData(mapId);
+			if (map == null || map.scale != home.scale || !map.dimension.equals(home.dimension) || isDrawing(map)) {
+				continue;
+			}
+			int dx = map.centerX - home.centerX;
+			int dz = map.centerZ - home.centerZ;
+			if (dx % span != 0 || dz % span != 0 || Math.abs(dx / span) > 1 || Math.abs(dz / span) > 1) {
+				continue;
+			}
+			int index = (dz / span + 1) * SHEET + dx / span + 1;
+			if (sheet[index] < 0) {
+				sheet[index] = mapId.id();
+			}
+		}
+		return sheet;
+	}
+
+	/** Whether a map is on a table's sheet: the table's own map, or one the player carries beside it. */
+	static boolean inSheet(ServerLevel level, Player player, CartographyTableMenu menu, int mapId) {
+		for (int id : sheet(level, player, menu)) {
+			if (id >= 0 && id == mapId) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A drawing's map: locked, with nothing explored, so it isn't anywhere in the world. */
+	static boolean isDrawing(MapItemSavedData map) {
+		if (!map.locked) {
+			return false;
+		}
+		for (byte color : map.colors) {
+			if (color != 0) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

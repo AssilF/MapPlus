@@ -51,6 +51,12 @@ import java.util.Optional;
  * carries on the cursor over the map is the tool; the rack under the map picks
  * tools up from the inventory. Shown to players who play with the mod on both
  * sides.
+ *
+ * <p>Zoomed out, the desk is a drafting table: the maps the player carries that
+ * border the one on the table lie around it, a sheet of three by three at a
+ * third of their size, and the pen, brush, string, frame and chain draw
+ * straight across them. Clicking a map there with an empty hand puts it on the
+ * table instead.
  */
 public final class DeskWing {
 	/** The vanilla window is this wide; the wing makes it {@link #WIDTH}. */
@@ -76,6 +82,18 @@ public final class DeskWing {
 	private static final int PENDING_TICKS = 60;
 	/** The vanilla button that swaps a slot with the off hand. */
 	private static final int OFF_HAND_BUTTON = 40;
+	/**
+	 * A left click, as container clicks count buttons: 0, whatever number the
+	 * mouse's left button has, so a click takes or puts down a whole stack.
+	 */
+	private static final int LEFT_CLICK = 0;
+	/** The sheet, zoomed out: the map on the table in the middle, the maps carried around it, at a third of their size. */
+	private static final int SHEET = DrawingDesk.SHEET;
+	private static final int SHEET_WIDTH = Ink.SIZE * SHEET;
+	private static final int MIDDLE = SHEET * SHEET / 2;
+	/** The button beside the rack that lays the sheet out. */
+	private static final int ZOOM_X = 323;
+	private static final int ZOOM_WIDTH = 11;
 
 	private static final int FILL = 0xFFC6C6C6;
 	private static final int SLOT_DARK = 0xFF373737;
@@ -157,6 +175,16 @@ public final class DeskWing {
 	/** Every pixel the pen has touched this stroke, so a pixel crossed twice is inked once. */
 	private final BitSet penStroke = new BitSet(Ink.PIXELS);
 
+	/** Whether the desk shows the sheet of maps rather than the one on the table. Kept from table to table. */
+	private static boolean zoomedOut;
+	private final MapRenderState[] sheetStates = new MapRenderState[SHEET * SHEET];
+	private final InkPreview sheetPreview = new InkPreview(SHEET_WIDTH);
+	/** Whether the stroke being drawn is on the sheet, crossing maps; its pen pixels, all it has touched, and its shape. */
+	private boolean onSheet;
+	private final BitSet sheetPen = new BitSet(SHEET_WIDTH * SHEET_WIDTH);
+	private final BitSet sheetPenStroke = new BitSet(SHEET_WIDTH * SHEET_WIDTH);
+	private final BitSet sheetShape = new BitSet(SHEET_WIDTH * SHEET_WIDTH);
+
 	/** A mark edit sent to the server, shown until the map's marks come back changed. */
 	private Mark pending;
 	private int pendingHidden = -1;
@@ -186,6 +214,9 @@ public final class DeskWing {
 
 	public DeskWing(CartographyTableScreen screen) {
 		this.screen = screen;
+		for (int i = 0; i < sheetStates.length; i++) {
+			sheetStates[i] = new MapRenderState();
+		}
 	}
 
 	private int left() {
@@ -275,6 +306,102 @@ public final class DeskWing {
 		return mapId == null || minecraft.level == null ? null : minecraft.level.getMapData(mapId);
 	}
 
+	// The sheet
+
+	/** Whether the map on the table can be laid out with the maps around it: a map of somewhere, not a drawing. */
+	private boolean canLayOut() {
+		MapId mapId = shownMap();
+		return input().is(Items.FILLED_MAP) && mapId != null && DeskState.get().sheetMap(MIDDLE) == mapId.id();
+	}
+
+	private boolean sheetShown() {
+		return zoomedOut && input().is(Items.FILLED_MAP);
+	}
+
+	/**
+	 * The maps on the sheet, row by row. Until the server has laid out a map
+	 * just put on the table, it lies alone in the middle.
+	 */
+	private int[] sheet() {
+		int[] sheet = new int[SHEET * SHEET];
+		java.util.Arrays.fill(sheet, -1);
+		MapId mapId = shownMap();
+		InkStatePayload state = DeskState.get();
+		if (mapId != null && state.sheetMap(MIDDLE) == mapId.id()) {
+			for (int i = 0; i < sheet.length; i++) {
+				sheet[i] = state.sheetMap(i);
+			}
+		} else if (mapId != null) {
+			sheet[MIDDLE] = mapId.id();
+		}
+		return sheet;
+	}
+
+	/** Whether the map at a place on the sheet is sealed against drawing. */
+	private boolean sealedOnSheet(int index) {
+		return (DeskState.get().sealedSheet() >> index & 1) != 0;
+	}
+
+	/** The sheet pixel under the mouse, a third of a screen pixel each way. */
+	private int sheetX(double mouseX) {
+		return (int) Math.floor((mouseX - left() - CANVAS_X) * SHEET);
+	}
+
+	private int sheetY(double mouseY) {
+		return (int) Math.floor((mouseY - top() - CANVAS_Y) * SHEET);
+	}
+
+	/** The place on the sheet a sheet pixel is in. */
+	private static int tile(int x, int y) {
+		return Math.clamp(y / Ink.SIZE, 0, SHEET - 1) * SHEET + Math.clamp(x / Ink.SIZE, 0, SHEET - 1);
+	}
+
+	private void setZoomedOut(boolean out) {
+		if (zoomedOut == out) {
+			return;
+		}
+		flushPen();
+		flushSheetPen();
+		stroke = null;
+		onSheet = false;
+		shape.clear();
+		sheetShape.clear();
+		zoomedOut = out;
+		// Maps spread over the table, or gathered back.
+		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, out ? 0.9F : 1.1F, 0.8F));
+	}
+
+	/**
+	 * Puts a map the player carries on the table, and the table's map where it
+	 * was, by swapping each through the off hand as the F key would, so the tool
+	 * on the cursor stays there.
+	 */
+	private void putOnTable(int mapId) {
+		Slot from = null;
+		for (Slot slot : menu().slots) {
+			if (slot.container instanceof Inventory && isMap(slot.getItem(), mapId)) {
+				from = slot;
+				break;
+			}
+		}
+		if (from != null) {
+			click(from.index, OFF_HAND_BUTTON, ContainerInput.SWAP);
+			click(CartographyTableMenu.MAP_SLOT, OFF_HAND_BUTTON, ContainerInput.SWAP);
+			click(from.index, OFF_HAND_BUTTON, ContainerInput.SWAP);
+		} else if (minecraft.player != null && isMap(minecraft.player.getOffhandItem(), mapId)) {
+			click(CartographyTableMenu.MAP_SLOT, OFF_HAND_BUTTON, ContainerInput.SWAP);
+		} else {
+			deny();
+			return;
+		}
+		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F, 0.8F));
+	}
+
+	private static boolean isMap(ItemStack stack, int mapId) {
+		MapId id = stack.get(DataComponents.MAP_ID);
+		return stack.is(Items.FILLED_MAP) && id != null && id.id() == mapId;
+	}
+
 	// Geometry
 
 	private boolean over(double mouseX, double mouseY, int x, int y, int width, int height) {
@@ -340,6 +467,22 @@ public final class DeskWing {
 			}
 		}
 
+		// The sheet button: a little sheet of three by three maps, the table's in the middle.
+		int zoomX = left + ZOOM_X;
+		int zoomY = top + RACK_Y;
+		boolean canLayOut = canLayOut();
+		boolean zoomHovered = over(mouseX, mouseY, ZOOM_X, RACK_Y, ZOOM_WIDTH, BUTTON_HEIGHT);
+		Identifier zoomSprite = sheetShown() ? BUTTON_SELECTED : zoomHovered && canLayOut ? BUTTON_HIGHLIGHTED : BUTTON;
+		graphics.blitSprite(RenderPipelines.GUI_TEXTURED, zoomSprite, zoomX, zoomY, ZOOM_WIDTH, BUTTON_HEIGHT);
+		for (int i = 0; i < SHEET * SHEET; i++) {
+			int cellX = zoomX + 2 + i % SHEET * 3;
+			int cellY = zoomY + 5 + i / SHEET * 3;
+			graphics.fill(cellX, cellY, cellX + 2, cellY + 2, i == MIDDLE ? 0xFFF0E2C0 : 0xFF8F7A5A);
+		}
+		if (!canLayOut && !sheetShown()) {
+			graphics.fill(zoomX + 1, zoomY + 1, zoomX + ZOOM_WIDTH - 1, zoomY + BUTTON_HEIGHT - 1, FADED);
+		}
+
 		// The palette: a swatch per ink, outlined when it's in the second slot, faded when the player has none.
 		InkMaterial loaded = material();
 		ItemStack inSlot = menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem();
@@ -385,9 +528,9 @@ public final class DeskWing {
 			return;
 		}
 		if (!inSlot.isEmpty()) {
-			click(CartographyTableMenu.ADDITIONAL_SLOT, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.QUICK_MOVE);
+			click(CartographyTableMenu.ADDITIONAL_SLOT, LEFT_CLICK, ContainerInput.QUICK_MOVE);
 		}
-		click(from, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.QUICK_MOVE);
+		click(from, LEFT_CLICK, ContainerInput.QUICK_MOVE);
 		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.DYE_USE, 1.2F, 0.5F));
 	}
 
@@ -399,6 +542,10 @@ public final class DeskWing {
 		graphics.fill(x + Ink.SIZE, y, x + Ink.SIZE + 1, y + Ink.SIZE, SLOT_LIGHT);
 		if (!hasCanvas()) {
 			graphics.fill(x, y, x + Ink.SIZE, y + Ink.SIZE, SLOT_INSIDE);
+			return;
+		}
+		if (sheetShown()) {
+			extractSheet(graphics, x, y, mouseX, mouseY);
 			return;
 		}
 
@@ -430,6 +577,59 @@ public final class DeskWing {
 			Strokes.dab(cursor, pixelX(mouseX), pixelY(mouseY), tool.size());
 			int color = InkPreview.previewColor(material, strength);
 			InkPreview.drawRuns(graphics, x, y, cursor, (color & 0x00FFFFFF) | Math.round((color >>> 24) * 0.6F) << 24);
+		}
+	}
+
+	/** The sheet: each map on its paper at a third of its size, the table's own framed, and the strokes crossing them. */
+	private void extractSheet(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY) {
+		int[] sheet = sheet();
+		graphics.fill(x, y, x + Ink.SIZE, y + Ink.SIZE, SLOT_INSIDE);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(x, y);
+		graphics.pose().scale(1.0F / SHEET, 1.0F / SHEET);
+		for (int i = 0; i < sheet.length; i++) {
+			if (sheet[i] < 0) {
+				continue;
+			}
+			int tileX = i % SHEET * Ink.SIZE;
+			int tileY = i / SHEET * Ink.SIZE;
+			graphics.blit(RenderPipelines.GUI_TEXTURED, MAP_BACKGROUND, tileX, tileY, 7, 7, Ink.SIZE, Ink.SIZE, Ink.SIZE, Ink.SIZE, 142, 142);
+			MapId mapId = new MapId(sheet[i]);
+			MapItemSavedData data = mapData(mapId);
+			if (data != null) {
+				graphics.pose().pushMatrix();
+				graphics.pose().translate(tileX, tileY);
+				minecraft.getMapRenderer().extractRenderState(mapId, data, sheetStates[i]);
+				graphics.map(sheetStates[i]);
+				graphics.pose().popMatrix();
+			}
+		}
+		sheetPreview.extract(graphics, 0, 0);
+		InkMaterial material = material();
+		if (material != null && !sheetShape.isEmpty()) {
+			InkPreview.drawRuns(graphics, 0, 0, sheetShape, InkPreview.previewColor(material, strength), SHEET_WIDTH);
+		}
+		graphics.pose().popMatrix();
+
+		int over = overCanvas(mouseX, mouseY) ? tile(sheetX(mouseX), sheetY(mouseY)) : -1;
+		for (int i = 0; i < sheet.length; i++) {
+			int x0 = x + Math.round(i % SHEET * Ink.SIZE / (float) SHEET);
+			int y0 = y + Math.round(i / SHEET * Ink.SIZE / (float) SHEET);
+			int x1 = x + Math.round((i % SHEET + 1) * Ink.SIZE / (float) SHEET);
+			int y1 = y + Math.round((i / SHEET + 1) * Ink.SIZE / (float) SHEET);
+			if (i == MIDDLE) {
+				// The map on the table, framed.
+				graphics.fill(x0, y0, x1, y0 + 1, SLOT_LIGHT);
+				graphics.fill(x0, y1 - 1, x1, y1, SLOT_LIGHT);
+				graphics.fill(x0, y0, x0 + 1, y1, SLOT_LIGHT);
+				graphics.fill(x1 - 1, y0, x1, y1, SLOT_LIGHT);
+			} else if (i == over && sheet[i] >= 0 && tool() == null && stroke == null) {
+				// A map an empty hand would put on the table.
+				graphics.fill(x0, y0, x1, y1, 0x40FFFFFF);
+			}
+			if (sheet[i] >= 0 && sealedOnSheet(i)) {
+				graphics.item(new ItemStack(Items.HONEYCOMB), x1 - 17, y0 + 1);
+			}
 		}
 	}
 
@@ -491,6 +691,17 @@ public final class DeskWing {
 				y += 10;
 			}
 		}
+		if (over(mouseX, mouseY, ZOOM_X, RACK_Y, ZOOM_WIDTH, BUTTON_HEIGHT)) {
+			List<Component> lines = new ArrayList<>();
+			lines.add(Component.translatable(sheetShown() ? "mapplus.desk.sheet.in" : "mapplus.desk.sheet.out"));
+			lines.add(Component.translatable("mapplus.desk.sheet.about").withStyle(ChatFormatting.GRAY));
+			if (!canLayOut() && !sheetShown()) {
+				lines.add(Component.translatable("mapplus.desk.sheet.none").withStyle(ChatFormatting.RED));
+			} else {
+				lines.add(Component.translatable("mapplus.desk.sheet.keys").withStyle(ChatFormatting.DARK_GRAY));
+			}
+			graphics.setTooltipForNextFrame(minecraft.font, lines, Optional.empty(), mouseX, mouseY);
+		}
 		for (int i = 0; i < PALETTE.size(); i++) {
 			if (over(mouseX, mouseY, PALETTE_X, CANVAS_Y + i * SWATCH, SWATCH, SWATCH)) {
 				Swatch swatch = PALETTE.get(i);
@@ -523,6 +734,19 @@ public final class DeskWing {
 	private Component canvasHint(int x, int y) {
 		if (!hasCanvas()) {
 			return Component.translatable("mapplus.desk.hint.map");
+		}
+		if (sheetShown()) {
+			InkTool tool = tool();
+			if (!DeskState.get().hasNeighbors()) {
+				return Component.translatable("mapplus.desk.hint.sheet_empty");
+			}
+			if (tool == null) {
+				return Component.translatable("mapplus.desk.hint.sheet");
+			}
+			if (!tool.draws() || tool == InkTool.FILL) {
+				return Component.translatable("mapplus.desk.hint.sheet_zoom");
+			}
+			return material() == null ? Component.translatable("mapplus.desk.hint.material") : null;
 		}
 		if (sealed()) {
 			return Component.translatable(DeskState.get().scrapable() ? "mapplus.desk.hint.sealed" : "mapplus.desk.hint.sealed_by_other");
@@ -630,7 +854,7 @@ public final class DeskWing {
 				deny();
 				return;
 			}
-			click(empty, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
+			click(empty, LEFT_CLICK, ContainerInput.PICKUP);
 			return;
 		}
 		ItemStack carried = menu().getCarried();
@@ -641,18 +865,18 @@ public final class DeskWing {
 				deny();
 				return;
 			}
-			click(empty, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
+			click(empty, LEFT_CLICK, ContainerInput.PICKUP);
 		}
 		int slot = inventorySlot(tool);
 		if (slot >= 0) {
-			click(slot, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
+			click(slot, LEFT_CLICK, ContainerInput.PICKUP);
 			return;
 		}
 		// A tool held in the off hand comes out through an empty slot, as the swap key would move it.
 		int empty = emptyInventorySlot();
 		if (minecraft.player != null && tool.matches(minecraft.player.getOffhandItem()) && empty >= 0) {
 			click(empty, OFF_HAND_BUTTON, ContainerInput.SWAP);
-			click(empty, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.PICKUP);
+			click(empty, LEFT_CLICK, ContainerInput.PICKUP);
 			return;
 		}
 		deny();
@@ -678,7 +902,11 @@ public final class DeskWing {
 		if (button == InputConstants.MOUSE_BUTTON_RIGHT && editing == null && overCanvas(mouseX, mouseY)) {
 			// The right button erases with any drawing tool, as the other end of a pencil.
 			InkTool tool = tool();
-			if (canErase(tool)) {
+			if (sheetShown()) {
+				if (drawsOnSheet(tool)) {
+					beginSheet(tool, sheetX(mouseX), sheetY(mouseY), true);
+				}
+			} else if (canErase(tool)) {
 				begin(tool, pixelX(mouseX), pixelY(mouseY), true);
 			}
 			return true;
@@ -701,12 +929,24 @@ public final class DeskWing {
 				return true;
 			}
 		}
+		if (over(mouseX, mouseY, ZOOM_X, RACK_Y, ZOOM_WIDTH, BUTTON_HEIGHT)) {
+			if (sheetShown() || canLayOut()) {
+				setZoomedOut(!sheetShown());
+			} else {
+				deny();
+			}
+			return true;
+		}
 		if (editing != null) {
 			// Clicking anywhere else finishes the label being typed.
 			commitLabel();
 			return true;
 		}
 		if (!overCanvas(mouseX, mouseY)) {
+			return true;
+		}
+		if (sheetShown()) {
+			clickSheet(mouseX, mouseY);
 			return true;
 		}
 		InkTool tool = tool();
@@ -784,7 +1024,56 @@ public final class DeskWing {
 		} else {
 			anchorX = x;
 			anchorY = y;
-			reshape(x, y);
+			reshape(shape, Ink.SIZE, x, y);
+		}
+	}
+
+	/**
+	 * A click on the sheet: with an empty hand, puts the map clicked on the
+	 * table (or zooms back in on the table's own); with a drawing tool, starts a
+	 * stroke across the maps. Fills, labels, pins and icons work on one map.
+	 */
+	private void clickSheet(double mouseX, double mouseY) {
+		int x = sheetX(mouseX);
+		int y = sheetY(mouseY);
+		int place = tile(x, y);
+		InkTool tool = tool();
+		if (tool == null) {
+			int mapId = sheet()[place];
+			if (place == MIDDLE) {
+				setZoomedOut(false);
+			} else if (mapId >= 0) {
+				putOnTable(mapId);
+			} else {
+				deny();
+			}
+			return;
+		}
+		if (drawsOnSheet(tool) && material() != null) {
+			beginSheet(tool, x, y, false);
+		} else {
+			deny();
+		}
+	}
+
+	/** Whether a tool draws across the sheet: the pen, brush, string, frame and chain. */
+	private boolean drawsOnSheet(InkTool tool) {
+		return tool != null && tool.draws() && tool != InkTool.FILL && unlocked(tool);
+	}
+
+	private void beginSheet(InkTool tool, int x, int y, boolean erase) {
+		erasing = erase;
+		stroke = tool;
+		onSheet = true;
+		if (tool == InkTool.PEN || tool == InkTool.BRUSH) {
+			sheetPenStroke.clear();
+			lastX = x;
+			lastY = y;
+			sheetDab(x, y, x, y);
+		} else {
+			anchorX = x;
+			anchorY = y;
+			reshape(sheetShape, SHEET_WIDTH, x, y);
 		}
 	}
 
@@ -801,6 +1090,18 @@ public final class DeskWing {
 		if (stroke == null) {
 			return true;
 		}
+		if (onSheet) {
+			int x = Math.clamp(sheetX(mouseX), -SHEET_WIDTH, SHEET_WIDTH * 2);
+			int y = Math.clamp(sheetY(mouseY), -SHEET_WIDTH, SHEET_WIDTH * 2);
+			if (stroke == InkTool.PEN || stroke == InkTool.BRUSH) {
+				sheetDab(lastX, lastY, x, y);
+				lastX = x;
+				lastY = y;
+			} else {
+				reshape(sheetShape, SHEET_WIDTH, x, y);
+			}
+			return true;
+		}
 		// Far enough out to cover any drag, close enough that lines stay cheap.
 		int x = Math.clamp(pixelX(mouseX), -Ink.SIZE, Ink.SIZE * 2);
 		int y = Math.clamp(pixelY(mouseY), -Ink.SIZE, Ink.SIZE * 2);
@@ -809,7 +1110,7 @@ public final class DeskWing {
 			lastX = x;
 			lastY = y;
 		} else {
-			reshape(x, y);
+			reshape(shape, Ink.SIZE, x, y);
 		}
 		return true;
 	}
@@ -828,6 +1129,17 @@ public final class DeskWing {
 		}
 		InkTool tool = stroke;
 		stroke = null;
+		if (onSheet) {
+			onSheet = false;
+			if (tool == InkTool.PEN || tool == InkTool.BRUSH) {
+				flushSheetPen();
+			} else if (!sheetShape.isEmpty()) {
+				BitSet pixels = (BitSet) sheetShape.clone();
+				sheetShape.clear();
+				sendSheet(pixels, tool);
+			}
+			return true;
+		}
 		if (tool == InkTool.PEN || tool == InkTool.BRUSH) {
 			flushPen();
 			penEndX = lastX;
@@ -846,6 +1158,15 @@ public final class DeskWing {
 	 * makes it stronger.
 	 */
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+		if (editing == null && stroke == null && overCanvas(mouseX, mouseY) && minecraft.hasControlDown()) {
+			// Ctrl and the wheel zoom out to the sheet of maps and back in.
+			if (amount < 0 && canLayOut()) {
+				setZoomedOut(true);
+			} else if (amount > 0) {
+				setZoomedOut(false);
+			}
+			return true;
+		}
 		if (editing == null && !(overCanvas(mouseX, mouseY) && hasCanvas() && tool() != null)) {
 			return false;
 		}
@@ -868,6 +1189,9 @@ public final class DeskWing {
 			// Scrolling up makes the ink stronger, down waters it down.
 			strength = Ink.clampStrength(strength - steps);
 			strengthShown = STRENGTH_SHOWN_TICKS;
+			return true;
+		}
+		if (sheetShown()) {
 			return true;
 		}
 		Mark mark = markAt(pixelX(mouseX), pixelY(mouseY), tool.mark());
@@ -936,14 +1260,20 @@ public final class DeskWing {
 		ticks++;
 		// Pen strokes go out as they're drawn, a tick's worth at a time.
 		flushPen();
+		flushSheetPen();
 		preview.acknowledge(DeskState.get().ack());
+		sheetPreview.acknowledge(DeskState.get().ack());
 		if (scratchTicks > 0) {
 			scratchTicks--;
 		}
-		if (stroke != null && !(erasing ? canErase(stroke) : canDraw(stroke))) {
+		if (stroke != null && (onSheet ? !sheetShown() || !drawsOnSheet(stroke) || !erasing && material() == null
+				: !(erasing ? canErase(stroke) : canDraw(stroke)))) {
 			stroke = null;
+			onSheet = false;
 			shape.clear();
+			sheetShape.clear();
 			penPixels.clear();
+			sheetPen.clear();
 		}
 		if (editing != null && (tool() != InkTool.LABEL || !canWrite())) {
 			cancelLabel();
@@ -969,14 +1299,18 @@ public final class DeskWing {
 
 	public void acknowledge(int ack) {
 		preview.acknowledge(ack);
+		sheetPreview.acknowledge(ack);
 	}
 
 	/** Sends what the pen drew, before the window tells the server it closed. */
 	public void close() {
 		flushPen();
+		flushSheetPen();
 		pressButton = -1;
 		stroke = null;
+		onSheet = false;
 		shape.clear();
+		sheetShape.clear();
 		if (editing != null) {
 			stopEditing();
 		}
@@ -1028,7 +1362,8 @@ public final class DeskWing {
 		penSeq = 0;
 	}
 
-	private void reshape(int x, int y) {
+	/** Lays out the line, box or border being dragged from the anchor to a point, on a map or on the sheet. */
+	private void reshape(BitSet shape, int width, int x, int y) {
 		shape.clear();
 		// Shift keeps lines straight, at right angles or diagonal, and boxes square.
 		if (minecraft.hasShiftDown()) {
@@ -1049,9 +1384,9 @@ public final class DeskWing {
 			}
 		}
 		switch (stroke) {
-			case LINE -> Strokes.line(shape, anchorX, anchorY, x, y, 1);
-			case BOX -> Strokes.box(shape, Math.min(anchorX, x), Math.min(anchorY, y), Math.max(anchorX, x), Math.max(anchorY, y), 1);
-			case BORDER -> Strokes.dashed(shape, anchorX, anchorY, x, y, DASH, GAP);
+			case LINE -> Strokes.line(shape, anchorX, anchorY, x, y, 1, width);
+			case BOX -> Strokes.box(shape, Math.min(anchorX, x), Math.min(anchorY, y), Math.max(anchorX, x), Math.max(anchorY, y), 1, width);
+			case BORDER -> Strokes.dashed(shape, anchorX, anchorY, x, y, DASH, GAP, width);
 			default -> {
 			}
 		}
@@ -1087,6 +1422,97 @@ public final class DeskWing {
 				: tool == InkTool.FILL ? SoundEvents.BUCKET_EMPTY
 				: SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT;
 		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.1F, 0.6F));
+	}
+
+	/** The pen or brush moving across the sheet: its pixels, on maps that can be drawn on, go out as they're drawn. */
+	private void sheetDab(int x0, int y0, int x1, int y1) {
+		BitSet pixels = new BitSet(SHEET_WIDTH * SHEET_WIDTH);
+		Strokes.line(pixels, x0, y0, x1, y1, stroke.size(), SHEET_WIDTH);
+		pixels.andNot(sheetPenStroke);
+		sheetPenStroke.or(pixels);
+		pixels.and(drawable());
+		if (pixels.isEmpty()) {
+			return;
+		}
+		if (penSeq == 0) {
+			penSeq = DeskState.nextSeq();
+		}
+		sheetPen.or(pixels);
+		InkMaterial material = strokeMaterial();
+		if (material != null) {
+			sheetPreview.add(pixels, penSeq, InkPreview.previewColor(material, strokeStrength()));
+		}
+		if (scratchTicks <= 0) {
+			scratchTicks = 4;
+			minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT,
+					0.9F + minecraft.level.getRandom().nextFloat() * 0.4F, 0.25F));
+		}
+	}
+
+	private void flushSheetPen() {
+		if (sheetPen.isEmpty()) {
+			return;
+		}
+		for (java.util.Map.Entry<Integer, BitSet> part : split(sheetPen).entrySet()) {
+			ClientPlayNetworking.send(new InkStrokePayload(penSeq, part.getKey(), false, strokeStrength(), erasing, part.getValue()));
+		}
+		sheetPen.clear();
+		penSeq = 0;
+	}
+
+	/** Sends a finished line, box or border on the sheet: each map it crosses gets its part, drawn whole. */
+	private void sendSheet(BitSet pixels, InkTool tool) {
+		InkMaterial material = strokeMaterial();
+		pixels.and(drawable());
+		if (material == null || pixels.isEmpty()) {
+			return;
+		}
+		if (!erasing && !affordable((pixels.cardinality() * material.quarters(strength) + 3) / 4, material)) {
+			deny();
+			return;
+		}
+		int seq = DeskState.nextSeq();
+		sheetPreview.add(pixels, seq, InkPreview.previewColor(material, strokeStrength()));
+		for (java.util.Map.Entry<Integer, BitSet> part : split(pixels).entrySet()) {
+			ClientPlayNetworking.send(new InkStrokePayload(seq, part.getKey(), true, strokeStrength(), erasing, part.getValue()));
+		}
+		SoundEvent sound = erasing || material.kind() == InkMaterial.Kind.WATER ? SoundEvents.BOTTLE_EMPTY
+				: material.kind() == InkMaterial.Kind.GLOW ? SoundEvents.GLOW_INK_SAC_USE
+				: SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT;
+		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.1F, 0.6F));
+	}
+
+	/** The sheet pixels a stroke can draw on: those of maps on the sheet that aren't sealed. */
+	private BitSet drawable() {
+		int[] sheet = sheet();
+		BitSet drawable = new BitSet(SHEET_WIDTH * SHEET_WIDTH);
+		for (int i = 0; i < sheet.length; i++) {
+			if (sheet[i] < 0 || sealedOnSheet(i)) {
+				continue;
+			}
+			int tileX = i % SHEET * Ink.SIZE;
+			int tileY = i / SHEET * Ink.SIZE;
+			for (int row = 0; row < Ink.SIZE; row++) {
+				int start = tileX + (tileY + row) * SHEET_WIDTH;
+				drawable.set(start, start + Ink.SIZE);
+			}
+		}
+		return drawable;
+	}
+
+	/** A stroke on the sheet, cut into the part on each map it crosses, by map. */
+	private java.util.Map<Integer, BitSet> split(BitSet pixels) {
+		int[] sheet = sheet();
+		java.util.Map<Integer, BitSet> parts = new java.util.LinkedHashMap<>();
+		for (int i = pixels.nextSetBit(0); i >= 0 && i < SHEET_WIDTH * SHEET_WIDTH; i = pixels.nextSetBit(i + 1)) {
+			int x = i % SHEET_WIDTH;
+			int y = i / SHEET_WIDTH;
+			int mapId = sheet[tile(x, y)];
+			if (mapId >= 0) {
+				parts.computeIfAbsent(mapId, id -> new BitSet(Ink.PIXELS)).set(x % Ink.SIZE + y % Ink.SIZE * Ink.SIZE);
+			}
+		}
+		return parts;
 	}
 
 	/** A rough check before sending, so a shape that can't be paid for doesn't flash on the canvas. */

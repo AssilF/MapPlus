@@ -657,8 +657,8 @@ takes ink from a hand. Effort: medium.
 2. ~~Labels, pins and borders, unlocked by a loom~~ (built)
 3. ~~Watering down, tints, sherd icons, banner designs, sizes, paper canvases~~
    (built; see [Built: tints and icons](#built-tints-and-icons))
-4. **The drafting table:** several maps tiled on the table at once, zoomed
-   out to see the whole and in to work, drawing straight across them
+4. ~~The drafting table~~ (built; see
+   [Built: the drafting table](#built-the-drafting-table))
 5. Choosing the page and cutting maps out, with the book on the desk
 6. Atlases shown like maps: held, the open spread's map shows as a held map
    does; in an item frame, the open map shows as a framed map does
@@ -772,6 +772,43 @@ border still stops where a neighbor's land begins.
   later go after them. Sketched pages have no text box, show in the book
   screens, on lecterns and facing a map, and are empty pages for players
   without the mod.
+
+### Built: the drafting table
+
+As planned, with the table's one map slot kept as vanilla has it:
+
+- **The sheet is what the player carries.** The table still holds one map.
+  The maps the player carries (inventory and off hand) that border it, of the
+  same scale and dimension, lie around it: a sheet of three by three, worked
+  out by the server, which knows where maps are, and sent with the desk's
+  state, with which of them are sealed. Drawings (locked maps with nothing
+  explored) aren't anywhere, so they have no sheet.
+- **Zooming out** shows the sheet at a third of its size: the sheet button at
+  the end of the rack (a little three by three grid), or Ctrl and the wheel
+  over the map. The table's map is framed; the map under an empty hand lights
+  up.
+- **Drawing across:** the pen, brush, string, item frame and chain work in
+  sheet pixels (a map pixel each, three to a screen pixel at this size), and
+  each stroke is cut into the part on each map it crosses and sent to each
+  under one stroke number. The server accepts a stroke for a map on the
+  sheet as for the table's own, paid from the second slot. Pixels off the
+  sheet's maps, or on sealed ones, aren't drawn. Fills, labels, pins and
+  icons need one map: zoom in.
+- **Changing maps:** clicking a map on the sheet with an empty hand swaps it
+  onto the table through the off hand, with vanilla's own swap clicks, so the
+  table's map lands where the other one was and the off hand ends as it was.
+- Zooming is kept from table to table, as the ink's strength is.
+
+Also this round:
+
+- **Cave maps keep what they showed first.** A cave map only draws pixels it
+  hasn't drawn yet, so walking on at another level adds to it rather than
+  redrawing it at the new level, as a map of the surface keeps what it has
+  explored. The echo fills in only blanks too.
+- **Whole stacks at the rack.** 26.3 numbers the mouse's left button 1, but
+  container clicks still count a left click as 0; the rack and palette sent 1,
+  a right click, so picking up a stack of string or chain took half of it and
+  putting it back put down one. They send a left click now.
 
 ### Built: tints and icons
 

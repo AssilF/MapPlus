@@ -64,6 +64,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 	private static final int SIGN = 6;
 	private static final int BANNER = 7;
 	private static final int SHERD = 8;
+	private static final int ZOOM_X = 323;
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
@@ -221,6 +222,53 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			server.runOnServer(minecraft -> openTable(minecraft, menu -> {
 			}));
 			context.waitForScreen(CartographyTableScreen.class);
+
+			// The drafting table: the explored map on the table and the map of the land to its east carried, laid out
+			// together, and a border drawn with the chain from one straight across into the other.
+			ItemStack east = server.computeOnServer(minecraft -> exploredMap(minecraft, Ink.SIZE));
+			server.runOnServer(minecraft -> {
+				minecraft.getPlayerList().getPlayers().getFirst().getInventory().add(east.copy());
+				withTable(minecraft, menu -> {
+					menu.getSlot(CartographyTableMenu.MAP_SLOT).set(explored.copy());
+					menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 32));
+				});
+			});
+			context.waitTicks(10);
+			clickTool(context, CHAIN);
+			hover(context, ZOOM_X + 5, RACK_Y + 9);
+			context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+			context.waitTicks(5);
+			drag(context, 50, 60, 120, 75);
+			context.waitTicks(10);
+			context.takeScreenshot("desk_sheet");
+			int eastId = east.get(DataComponents.MAP_ID).id();
+			boolean crossed = server.computeOnServer(minecraft -> {
+				InkLayer homeInk = InkData.get(minecraft).find(explored.get(DataComponents.MAP_ID));
+				InkLayer eastInk = InkData.get(minecraft).find(new MapId(eastId));
+				return homeInk != null && !homeInk.isEmpty() && eastInk != null && !eastInk.isEmpty();
+			});
+			if (!crossed) {
+				throw new AssertionError("A border drawn across the sheet should ink both the table's map and the one beside it");
+			}
+			// With an empty hand, clicking the map to the east puts it on the table, and the table's map in its place.
+			clickTool(context, CHAIN);
+			hover(context, CANVAS_X + 106, CANVAS_Y + 64);
+			context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+			context.waitTicks(10);
+			context.takeScreenshot("desk_sheet_swapped");
+			boolean swapped = server.computeOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				ItemStack onTable = player.containerMenu instanceof CartographyTableMenu menu
+						? menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem() : ItemStack.EMPTY;
+				return eastId == (onTable.has(DataComponents.MAP_ID) ? onTable.get(DataComponents.MAP_ID).id() : -1)
+						&& player.getInventory().contains(stack -> explored.get(DataComponents.MAP_ID).equals(stack.get(DataComponents.MAP_ID)));
+			});
+			if (!swapped) {
+				throw new AssertionError("Clicking the carried map with an empty hand should put it on the table");
+			}
+			hover(context, ZOOM_X + 5, RACK_Y + 9);
+			context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+			context.waitTicks(3);
 
 			// Paper is a blank canvas; the drawing is the result.
 			server.runOnServer(minecraft -> withTable(minecraft, menu -> {
@@ -395,9 +443,14 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 
 	/** A map of the area around the player, filled in as if they had walked around with it. */
 	private static ItemStack exploredMap(MinecraftServer minecraft) {
+		return exploredMap(minecraft, 0);
+	}
+
+	/** A map of the land some blocks east of the player, filled in as far as they can see from where they stand. */
+	private static ItemStack exploredMap(MinecraftServer minecraft, int east) {
 		ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 		ServerLevel level = player.level();
-		ItemStack map = MapItem.create(level, player.getBlockX(), player.getBlockZ(), (byte) 0, true, false);
+		ItemStack map = MapItem.create(level, player.getBlockX() + east, player.getBlockZ(), (byte) 0, true, false);
 		MapItemSavedData data = MapItem.getSavedData(map, level);
 		for (int i = 0; i < 40; i++) {
 			((MapItem) Items.FILLED_MAP).update(level, player, data);

@@ -636,8 +636,15 @@ public class MapPlusGameTest {
 		player.setPos(open.getX() + 0.5, depth - 1, open.getZ() + 0.5);
 		ItemStack mapStack = mapItem(mapId);
 		CaveMaps.ring(level, player, mapStack, false);
-		helper.assertValueEqual(map.colors[MapPixels.pixelX(map, wall.getX()) + MapPixels.pixelZ(map, wall.getZ()) * Ink.SIZE],
-				MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST), Component.literal("an amethyst shard's ring maps the cave around"));
+		int wallPixel = MapPixels.pixelX(map, wall.getX()) + MapPixels.pixelZ(map, wall.getZ()) * Ink.SIZE;
+		helper.assertValueEqual(map.colors[wallPixel], MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST),
+				Component.literal("an amethyst shard's ring maps the cave around"));
+		// A level higher, the wall's column is open; but what was drawn there first stays, as on any map.
+		player.setPos(open.getX() + 0.5, depth, open.getZ() + 0.5);
+		CaveMaps.ring(level, player, mapStack, false);
+		CaveMaps.update(level, player, map, mapId);
+		helper.assertValueEqual(map.colors[wallPixel], MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST),
+				Component.literal("what a cave map showed first stays"));
 		helper.succeed();
 	}
 
@@ -904,6 +911,37 @@ public class MapPlusGameTest {
 
 		Sketching.draw(player, new SketchPayload(false, 1, Ink.FULL, true, line));
 		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(1) == null, Component.literal("erased, the page is empty again"));
+		helper.succeed();
+	}
+
+	/** Maps the player carries that border the one on the table lie around it on the sheet, and are drawn on from the table. */
+	@GameTest
+	public void neighboringMapsLieAroundTheTable(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId home = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData homeMap = level.getMapData(home);
+		MapId east = newMap(level, new BlockPos(homeMap.centerX + Ink.SIZE, 0, homeMap.centerZ));
+		MapId farEast = newMap(level, new BlockPos(homeMap.centerX + 2 * Ink.SIZE, 0, homeMap.centerZ));
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(home));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.INK_SAC, 4));
+		player.getInventory().add(mapItem(east));
+		player.getInventory().add(mapItem(farEast));
+
+		int[] sheet = DrawingDesk.sheet(level, player, menu);
+		helper.assertValueEqual(sheet[4], home.id(), Component.literal("the table's map in the middle"));
+		helper.assertValueEqual(sheet[5], east.id(), Component.literal("the map of the land to the east beside it"));
+		helper.assertValueEqual(sheet[3], -1, Component.literal("nothing carried to the west"));
+		for (int id : sheet) {
+			helper.assertFalse(id == farEast.id(), Component.literal("a map two over isn't on the sheet"));
+		}
+
+		InkManager.draw(player, menu, level, new InkStrokePayload(1, east.id(), false, pixels(5, 6, 7)));
+		InkLayer layer = InkData.get(level.getServer()).find(east);
+		helper.assertTrue(layer != null && Ink.isPresent(layer.get(6)), Component.literal("drawn on the carried map from the table"));
+		InkManager.draw(player, menu, level, new InkStrokePayload(2, farEast.id(), false, pixels(5)));
+		helper.assertTrue(InkData.get(level.getServer()).find(farEast) == null, Component.literal("nothing drawn on a map off the sheet"));
 		helper.succeed();
 	}
 }

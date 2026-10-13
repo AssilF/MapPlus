@@ -26,8 +26,10 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -148,8 +150,15 @@ public final class InkManager {
 		MapId mapId;
 		if (input.is(Items.FILLED_MAP)) {
 			mapId = input.get(DataComponents.MAP_ID);
-			if (mapId == null || mapId.id() != payload.mapId()) {
+			if (mapId == null) {
 				return;
+			}
+			if (mapId.id() != payload.mapId()) {
+				// Drawn across from the table's map onto a map the player carries beside it.
+				if (!DrawingDesk.inSheet(level, player, menu, payload.mapId())) {
+					return;
+				}
+				mapId = new MapId(payload.mapId());
 			}
 		} else if (DrawingDesk.isBlankCanvas(input)) {
 			mapId = DrawingDesk.of(menu).mapplus$canvas();
@@ -303,6 +312,15 @@ public final class InkManager {
 			InkMaterial material = InkMaterial.of(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem());
 			InkSupply supply = player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY);
 			MapId canvas = DrawingDesk.of(menu).mapplus$canvas();
+			int[] sheet = DrawingDesk.sheet(player.level(), player, menu);
+			List<Integer> sheetIds = new ArrayList<>();
+			int sealedSheet = 0;
+			for (int i = 0; i < sheet.length; i++) {
+				sheetIds.add(sheet[i]);
+				if (sheet[i] >= 0 && InkData.get(server).isSealed(new MapId(sheet[i]))) {
+					sealedSheet |= 1 << i;
+				}
+			}
 			InkStatePayload state = new InkStatePayload(
 					session.ack,
 					canvas == null ? -1 : canvas.id(),
@@ -311,7 +329,9 @@ public final class InkManager {
 					material == null ? 1 : material.perItem(),
 					isFree(player),
 					DrawingDesk.mayMark(menu),
-					scrapable
+					scrapable,
+					List.copyOf(sheetIds),
+					sealedSheet
 			);
 			// Only the fill tool needs the ink itself; it's sent while the bucket is in hand.
 			if (InkTool.of(menu.getCarried()) == InkTool.FILL) {

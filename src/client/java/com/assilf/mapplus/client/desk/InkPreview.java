@@ -18,9 +18,21 @@ final class InkPreview {
 	private static final int ERASE_TINT = 0xB0D6BE96;
 	private static final int FADE_TINT = 0x60D6BE96;
 
-	private final int[] colors = new int[Ink.PIXELS];
-	private final int[] strokes = new int[Ink.PIXELS];
+	/** How many pixels across: a map's, or a sheet of maps'. */
+	private final int width;
+	private final int[] colors;
+	private final int[] strokes;
 	private int count;
+
+	InkPreview() {
+		this(Ink.SIZE);
+	}
+
+	InkPreview(int width) {
+		this.width = width;
+		this.colors = new int[width * width];
+		this.strokes = new int[width * width];
+	}
 
 	/** The color a material shows on a pixel before the server confirms it, at a strength. */
 	static int previewColor(InkMaterial material, int strength) {
@@ -34,7 +46,7 @@ final class InkPreview {
 	}
 
 	void add(BitSet pixels, int seq, int color) {
-		for (int i = pixels.nextSetBit(0); i >= 0 && i < Ink.PIXELS; i = pixels.nextSetBit(i + 1)) {
+		for (int i = pixels.nextSetBit(0); i >= 0 && i < colors.length; i = pixels.nextSetBit(i + 1)) {
 			if (colors[i] == 0) {
 				count++;
 			}
@@ -48,7 +60,7 @@ final class InkPreview {
 		if (count == 0) {
 			return;
 		}
-		for (int i = 0; i < Ink.PIXELS; i++) {
+		for (int i = 0; i < colors.length; i++) {
 			if (colors[i] != 0 && strokes[i] <= ack) {
 				colors[i] = 0;
 				count--;
@@ -58,11 +70,11 @@ final class InkPreview {
 
 	/** The pixels of strokes not back from the server yet. */
 	BitSet pending() {
-		BitSet pending = new BitSet(Ink.PIXELS);
+		BitSet pending = new BitSet(colors.length);
 		if (count == 0) {
 			return pending;
 		}
-		for (int i = 0; i < Ink.PIXELS; i++) {
+		for (int i = 0; i < colors.length; i++) {
 			if (colors[i] != 0) {
 				pending.set(i);
 			}
@@ -77,23 +89,23 @@ final class InkPreview {
 
 	void extract(GuiGraphicsExtractor graphics, int x, int y) {
 		if (count > 0) {
-			drawRuns(graphics, x, y, colors);
+			drawRuns(graphics, x, y, colors, width);
 		}
 	}
 
 	/** Draws a pixel layer as one fill per run of same-colored pixels in a row. */
-	static void drawRuns(GuiGraphicsExtractor graphics, int x, int y, int[] layer) {
-		for (int row = 0; row < Ink.SIZE; row++) {
-			int offset = row * Ink.SIZE;
+	static void drawRuns(GuiGraphicsExtractor graphics, int x, int y, int[] layer, int width) {
+		for (int row = 0; row < width; row++) {
+			int offset = row * width;
 			int column = 0;
-			while (column < Ink.SIZE) {
+			while (column < width) {
 				int color = layer[offset + column];
 				if (color == 0) {
 					column++;
 					continue;
 				}
 				int end = column + 1;
-				while (end < Ink.SIZE && layer[offset + end] == color) {
+				while (end < width && layer[offset + end] == color) {
 					end++;
 				}
 				graphics.fill(x + column, y + row, x + end, y + row + 1, color);
@@ -104,13 +116,17 @@ final class InkPreview {
 
 	/** Draws a set of pixels in one color, a run per row. */
 	static void drawRuns(GuiGraphicsExtractor graphics, int x, int y, BitSet pixels, int color) {
+		drawRuns(graphics, x, y, pixels, color, Ink.SIZE);
+	}
+
+	static void drawRuns(GuiGraphicsExtractor graphics, int x, int y, BitSet pixels, int color, int width) {
 		int i = pixels.nextSetBit(0);
-		while (i >= 0 && i < Ink.PIXELS) {
-			int row = i / Ink.SIZE;
-			int rowEnd = (row + 1) * Ink.SIZE;
+		while (i >= 0 && i < width * width) {
+			int row = i / width;
+			int rowEnd = (row + 1) * width;
 			int end = pixels.nextClearBit(i);
 			end = Math.min(end, rowEnd);
-			graphics.fill(x + i % Ink.SIZE, y + row, x + i % Ink.SIZE + (end - i), y + row + 1, color);
+			graphics.fill(x + i % width, y + row, x + i % width + (end - i), y + row + 1, color);
 			i = pixels.nextSetBit(end);
 		}
 	}

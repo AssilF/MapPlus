@@ -29,12 +29,15 @@ import net.minecraft.world.phys.Vec3;
  * Maps of the underground, and the echo.
  * <ul>
  * <li>An empty map used deep underground is a cave map: instead of the surface,
- * it draws what its holder sees around them in the caves, at whatever level
- * they're at: the floor they can see, and the rock walls around it.</li>
+ * it draws what its holder sees around them in the caves, at the level they're
+ * at: the floor they can see, and the rock walls around it. What's drawn stays
+ * drawn, as on a map of the surface: walking on at another level fills in
+ * only what the map hasn't shown yet, so it never turns into a scanner of
+ * whatever level its holder is at now.</li>
  * <li>An amethyst shard used with a map in the other hand rings out and sketches
  * the land around onto the map at once, through rock: the surface on a
- * surface map, the caves at your level on a cave map. An echo shard rings
- * twice as far.</li>
+ * surface map, the caves at your level on a cave map, where it hasn't been
+ * drawn yet. An echo shard rings twice as far.</li>
  * </ul>
  */
 public final class CaveMaps {
@@ -150,9 +153,10 @@ public final class CaveMaps {
 	}
 
 	/**
-	 * Fills a cave map's pixels in a circle; with a slice from 0 to 3, only that
-	 * quarter of the columns. With a viewer, only what they can see from where
-	 * they stand; without one, everything, as an echo hears through rock.
+	 * Fills a cave map's blank pixels in a circle; with a slice from 0 to 3, only
+	 * that quarter of the columns. With a viewer, only what they can see from
+	 * where they stand; without one, everything, as an echo hears through rock.
+	 * A pixel already drawn keeps what was first seen there.
 	 */
 	private static void fill(ServerLevel level, MapItemSavedData map, int depth, int px, int pz, int reach, int slice, Entity viewer) {
 		MapPixels.ChunkLookup loaded = MapPixels.ChunkLookup.loaded(level);
@@ -163,7 +167,7 @@ public final class CaveMaps {
 				continue;
 			}
 			for (int z = Math.max(0, pz - reach); z <= Math.min(127, pz + reach); z++) {
-				if ((x - px) * (x - px) + (z - pz) * (z - pz) > reach * reach) {
+				if ((x - px) * (x - px) + (z - pz) * (z - pz) > reach * reach || map.colors[x + z * 128] != 0) {
 					continue;
 				}
 				if (eye != null) {
