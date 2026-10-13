@@ -4,17 +4,19 @@ import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.client.atlas.AtlasBookScreen;
 import com.assilf.mapplus.client.desk.DeskState;
 import com.assilf.mapplus.client.desk.DeskWing;
-import com.assilf.mapplus.client.ink.ClientTints;
+import com.assilf.mapplus.client.foresight.Projection;
+import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.client.marks.ClientMarks;
 import com.assilf.mapplus.client.marks.MarkIcons;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.client.scope.ScopeMap;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.net.AtlasPagePayload;
 import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MapMarksPayload;
-import com.assilf.mapplus.net.MapTintsPayload;
+import com.assilf.mapplus.net.MapInkPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -44,10 +46,12 @@ public class MapPlusClient implements ClientModInitializer {
 		});
 		ClientPlayNetworking.registerGlobalReceiver(InkLayerPayload.TYPE, (payload, context) -> DeskState.accept(payload));
 		ClientPlayNetworking.registerGlobalReceiver(MapMarksPayload.TYPE, (payload, context) -> ClientMarks.accept(payload));
-		ClientPlayNetworking.registerGlobalReceiver(MapTintsPayload.TYPE, (payload, context) -> ClientTints.accept(payload));
+		ClientPlayNetworking.registerGlobalReceiver(MapInkPayload.TYPE, (payload, context) -> ClientInk.accept(payload));
+		ScopeMap.register();
+		Projection.register();
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			ClientMarks.clear();
-			ClientTints.clear();
+			ClientInk.clear();
 			// Made again on the next server, from the resource packs in use then.
 			client.execute(MarkIcons::clear);
 		});

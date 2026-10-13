@@ -13,20 +13,22 @@ import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
 /**
- * Server sends a player with the mod the watered down ink on a map, which
- * isn't in the map colors they're sent: their game blends it over the map
- * itself, so the map shows through it. Sent with the map when it changes.
+ * Server sends a player with the mod everything drawn over a map: its ink and
+ * the nations' land. Watered down ink and the land inside borders aren't in the
+ * map colors they're sent; their game blends those over the map itself, so the
+ * map shows through. The rest is in the map colors already, and is used to
+ * project the map into the world. Sent with the map when it changes.
  *
- * @param tints the watered down ink pixels, and no ink everywhere else
+ * @param ink one ink byte per map pixel, no ink where nothing is drawn
  */
-public record MapTintsPayload(int mapId, byte[] tints) implements CustomPacketPayload {
-	public static final Type<MapTintsPayload> TYPE = new Type<>(MapPlus.id("map_tints"));
-	public static final StreamCodec<FriendlyByteBuf, MapTintsPayload> CODEC = StreamCodec.of(
+public record MapInkPayload(int mapId, byte[] ink) implements CustomPacketPayload {
+	public static final Type<MapInkPayload> TYPE = new Type<>(MapPlus.id("map_ink"));
+	public static final StreamCodec<FriendlyByteBuf, MapInkPayload> CODEC = StreamCodec.of(
 			(buf, payload) -> {
 				buf.writeVarInt(payload.mapId);
-				buf.writeByteArray(deflate(payload.tints));
+				buf.writeByteArray(deflate(payload.ink));
 			},
-			buf -> new MapTintsPayload(buf.readVarInt(), inflate(buf.readByteArray(Ink.PIXELS + 1024)))
+			buf -> new MapInkPayload(buf.readVarInt(), inflate(buf.readByteArray(Ink.PIXELS + 1024)))
 	);
 
 	// Mostly no ink, so it packs down to very little.
@@ -57,7 +59,7 @@ public record MapTintsPayload(int mapId, byte[] tints) implements CustomPacketPa
 				length += read;
 			}
 		} catch (DataFormatException e) {
-			throw new DecoderException("Bad map tints", e);
+			throw new DecoderException("Bad map ink", e);
 		} finally {
 			inflater.end();
 		}

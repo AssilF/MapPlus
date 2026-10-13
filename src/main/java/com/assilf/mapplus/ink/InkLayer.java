@@ -155,28 +155,6 @@ public final class InkLayer {
 		return false;
 	}
 
-	/** Whether any ink is watered down. */
-	public boolean hasTints() {
-		for (byte pixel : pixels) {
-			if (Ink.isPresent(pixel) && Ink.strength(pixel) != Ink.FULL) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/** The watered down ink only, with no ink everywhere else. */
-	public byte[] tints() {
-		byte[] tints = new byte[Ink.PIXELS];
-		for (int i = 0; i < Ink.PIXELS; i++) {
-			byte pixel = pixels[i];
-			if (Ink.isPresent(pixel) && Ink.strength(pixel) != Ink.FULL) {
-				tints[i] = pixel;
-			}
-		}
-		return tints;
-	}
-
 	public List<Mark> marks() {
 		return marks;
 	}

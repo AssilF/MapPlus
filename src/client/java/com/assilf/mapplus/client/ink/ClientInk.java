@@ -1,7 +1,7 @@
 package com.assilf.mapplus.client.ink;
 
 import com.assilf.mapplus.ink.Ink;
-import com.assilf.mapplus.net.MapTintsPayload;
+import com.assilf.mapplus.net.MapInkPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.ARGB;
 import net.minecraft.world.level.saveddata.maps.MapId;
@@ -11,30 +11,31 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The watered down ink on each map the player has seen, as the server last
- * sent it. It's blended over the map's own colors when the map's picture is
- * made, so the map shows through it.
+ * Everything drawn over each map the player has seen, as the server last sent
+ * it: ink and nations' land. Watered down ink is blended over the map's own
+ * colors when the map's picture is made, so the map shows through it; the rest
+ * is in the map's colors already. Foresight projects all of it.
  */
-public final class ClientTints {
-	private static final Map<Integer, byte[]> TINTS = new HashMap<>();
+public final class ClientInk {
+	private static final Map<Integer, byte[]> INK = new HashMap<>();
 
-	private ClientTints() {
+	private ClientInk() {
 	}
 
-	public static void accept(MapTintsPayload payload) {
+	public static void accept(MapInkPayload payload) {
 		boolean any = false;
-		for (byte pixel : payload.tints()) {
+		for (byte pixel : payload.ink()) {
 			if (pixel != Ink.NONE) {
 				any = true;
 				break;
 			}
 		}
 		if (any) {
-			TINTS.put(payload.mapId(), payload.tints());
-		} else if (TINTS.remove(payload.mapId()) == null) {
+			INK.put(payload.mapId(), payload.ink());
+		} else if (INK.remove(payload.mapId()) == null) {
 			return;
 		}
-		// The map's picture is made again with the new tints.
+		// The map's picture is made again with the new ink.
 		Minecraft minecraft = Minecraft.getInstance();
 		MapId mapId = new MapId(payload.mapId());
 		MapItemSavedData data = minecraft.level == null ? null : minecraft.level.getMapData(mapId);
@@ -43,8 +44,9 @@ public final class ClientTints {
 		}
 	}
 
+	/** The ink over a map, or null if it has none. */
 	public static byte[] get(int mapId) {
-		return TINTS.get(mapId);
+		return INK.get(mapId);
 	}
 
 	/**
@@ -64,6 +66,6 @@ public final class ClientTints {
 	}
 
 	public static void clear() {
-		TINTS.clear();
+		INK.clear();
 	}
 }

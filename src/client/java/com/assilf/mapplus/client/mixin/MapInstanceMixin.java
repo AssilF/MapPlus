@@ -1,6 +1,6 @@
 package com.assilf.mapplus.client.mixin;
 
-import com.assilf.mapplus.client.ink.ClientTints;
+import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.ink.Ink;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -32,16 +32,17 @@ public abstract class MapInstanceMixin {
 	@Inject(method = "updateTextureIfNeeded", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/renderer/texture/DynamicTexture;upload()V"))
 	private void mapplus$blendTints(CallbackInfo ci) {
-		byte[] tints = ClientTints.get(mapplus$mapId);
+		byte[] ink = ClientInk.get(mapplus$mapId);
 		NativeImage pixels = texture.getPixels();
-		if (tints == null || pixels == null) {
+		if (ink == null || pixels == null) {
 			return;
 		}
+		// Full ink is in the map's colors already; only watered down ink is blended in.
 		for (int i = 0; i < Ink.PIXELS; i++) {
-			if (tints[i] != Ink.NONE) {
+			if (Ink.isPresent(ink[i]) && Ink.strength(ink[i]) != Ink.FULL) {
 				int x = i % Ink.SIZE;
 				int y = i / Ink.SIZE;
-				pixels.setPixel(x, y, ClientTints.blend(pixels.getPixel(x, y), tints[i]));
+				pixels.setPixel(x, y, ClientInk.blend(pixels.getPixel(x, y), ink[i]));
 			}
 		}
 	}

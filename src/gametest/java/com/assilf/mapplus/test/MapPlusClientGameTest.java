@@ -1,11 +1,14 @@
 package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.atlas.Atlas;
+import com.assilf.mapplus.client.foresight.Projection;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
 import com.assilf.mapplus.ink.Mark;
+import com.assilf.mapplus.nation.NationData;
+import com.assilf.mapplus.nation.Post;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -24,6 +27,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.Filterable;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -155,16 +159,49 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				throw new AssertionError("The fill should tint the fenced plot at half strength and nothing outside it");
 			}
 
-			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon.
+			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon, and a
+			// nation whose border post stands to the east.
 			server.runOnServer(minecraft -> {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 				player.closeContainer();
 				player.setItemInHand(InteractionHand.MAIN_HAND, explored.copy());
+				NationData.get(minecraft).put(new Post(player.level().dimension(), player.blockPosition().east(24), DyeColor.BLUE, List.of(),
+						"Blueland"));
 			});
-			context.waitTicks(5);
+			context.waitTicks(25);
 			context.getInput().lookAt(0, 70);
 			context.waitTicks(20);
 			context.takeScreenshot("held_map");
+
+			// Foresight: with the map in the off hand, its ink and labels are projected onto the land around.
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				ItemStack helmet = new ItemStack(Items.LEATHER_HELMET);
+				helmet.enchant(minecraft.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Projection.FORESIGHT), 1);
+				player.setItemSlot(EquipmentSlot.HEAD, helmet);
+				player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+				player.setItemInHand(InteractionHand.OFF_HAND, explored.copy());
+			});
+			context.waitTicks(10);
+			context.getInput().lookAt(0, 60);
+			context.waitTicks(10);
+			context.takeScreenshot("foresight");
+
+			// Looking through a spyglass with the map in the other hand shows the map in the corner; scrolling zooms.
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.SPYGLASS));
+			});
+			context.waitTicks(5);
+			context.getInput().lookAt(90, 10);
+			context.getInput().holdMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+			context.waitTicks(20);
+			context.takeScreenshot("scope_map");
+			context.getInput().scroll(3);
+			context.waitTicks(10);
+			context.takeScreenshot("scope_zoomed");
+			context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+			context.waitTicks(5);
 
 			server.runOnServer(minecraft -> openTable(minecraft, menu -> {
 			}));

@@ -11,8 +11,11 @@ import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.ink.InkSupply;
 import com.assilf.mapplus.ink.Mark;
 import com.assilf.mapplus.ink.MarkManager;
+import com.assilf.mapplus.nation.Post;
+import com.assilf.mapplus.nation.Territory;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MarkEditPayload;
+import com.assilf.mapplus.survey.CaveMaps;
 import com.assilf.mapplus.survey.MapPixels;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -552,6 +555,66 @@ public class MapPlusGameTest {
 		menu.setCarried(sherd);
 		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(5, mapId.id(), MarkEditPayload.Action.RESIZE, icon.id(), 0, 0, Mark.SMALL, "")),
 				Component.literal("icon made smaller, with its sherd"));
+		helper.succeed();
+	}
+
+	/**
+	 * A border post holds the land around it on maps, as far as it reaches;
+	 * water stops it, and the map's border shows in the nation's color.
+	 */
+	@GameTest
+	public void postsHoldLand(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		byte grass = MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL);
+		java.util.Arrays.fill(map.colors, grass);
+		BlockPos at = helper.absolutePos(new BlockPos(1, 1, 1));
+		int px = MapPixels.pixelX(map, at.getX());
+		int pz = MapPixels.pixelZ(map, at.getZ());
+		// A river two pixels east of the post, running the whole height of the map.
+		for (int z = 0; z < Ink.SIZE; z++) {
+			map.colors[Math.min(Ink.SIZE - 1, px + 2) + z * Ink.SIZE] = MapColor.WATER.getPackedId(MapColor.Brightness.NORMAL);
+		}
+		List<Post> posts = List.of(new Post(level.dimension(), at, DyeColor.RED, List.of(), "Redland"));
+		Territory territory = Territory.of(map, posts, 12);
+		helper.assertValueEqual(territory.owner(px + pz * Ink.SIZE), 1, Component.literal("the post's own spot"));
+		helper.assertValueEqual(territory.owner(Math.max(0, px - 8) + pz * Ink.SIZE), 1, Component.literal("land within reach"));
+		helper.assertValueEqual(territory.owner(Math.max(0, px - 20) + pz * Ink.SIZE), 0, Component.literal("land out of reach"));
+		helper.assertValueEqual(territory.owner(Math.min(Ink.SIZE - 1, px + 4) + pz * Ink.SIZE), 0, Component.literal("land across the river"));
+		boolean border = false;
+		for (int i = 0; i < Ink.PIXELS; i++) {
+			border |= territory.isBorder(i);
+		}
+		helper.assertTrue(border, Component.literal("the land has a border"));
+		helper.succeed();
+	}
+
+	/** A cave map shows rock as its darkest shade and open floor as it is. */
+	@GameTest
+	public void caveMapsShowTheirLevel(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		BlockPos wall = helper.absolutePos(new BlockPos(1, 2, 1));
+		BlockPos open = helper.absolutePos(new BlockPos(3, 2, 3));
+		helper.setBlock(new BlockPos(1, 2, 1), Blocks.STONE);
+		helper.setBlock(new BlockPos(3, 2, 3), Blocks.AIR);
+		helper.setBlock(new BlockPos(3, 1, 3), Blocks.COBBLESTONE);
+		MapPixels.ChunkLookup chunks = MapPixels.ChunkLookup.loaded(level);
+		int depth = wall.getY();
+		helper.assertValueEqual(MapPixels.caveColor(level, chunks, map, MapPixels.pixelX(map, wall.getX()), MapPixels.pixelZ(map, wall.getZ()), depth),
+				MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST) & 0xFF, Component.literal("rock"));
+		helper.assertValueEqual(MapPixels.caveColor(level, chunks, map, MapPixels.pixelX(map, open.getX()), MapPixels.pixelZ(map, open.getZ()), depth),
+				MapColor.STONE.getPackedId(MapColor.Brightness.HIGH) & 0xFF, Component.literal("the floor just below"));
+
+		InkData.get(level.getServer()).setDepth(mapId, depth);
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		player.setPos(open.getX() + 0.5, open.getY(), open.getZ() + 0.5);
+		ItemStack mapStack = mapItem(mapId);
+		CaveMaps.ring(level, player, mapStack, false);
+		helper.assertValueEqual(map.colors[MapPixels.pixelX(map, wall.getX()) + MapPixels.pixelZ(map, wall.getZ()) * Ink.SIZE],
+				MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST), Component.literal("an amethyst shard's ring maps the cave around"));
 		helper.succeed();
 	}
 

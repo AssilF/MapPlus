@@ -349,6 +349,7 @@ public final class InkManager {
 	public static void carryInk(ServerLevel level, MapId from, MapId to) {
 		InkData data = InkData.get(level.getServer());
 		data.setMaker(to, data.maker(from));
+		data.setDepth(to, data.depth(from));
 		InkLayer source = data.find(from);
 		MapItemSavedData oldMap = level.getMapData(from);
 		MapItemSavedData newMap = level.getMapData(to);

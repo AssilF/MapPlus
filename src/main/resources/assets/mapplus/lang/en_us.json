@@ -44,5 +44,9 @@
 	"mapplus.desk.strength.2": "Ink, ½ strength",
 	"mapplus.desk.strength.3": "Ink, ¼ strength",
 	"mapplus.desk.strength.erase": "Water: erase",
-	"mapplus.desk.strength.fade": "Water: fade one step"
+	"mapplus.desk.strength.fade": "Water: fade one step",
+	"enchantment.mapplus.foresight": "Foresight",
+	"mapplus.nation.entering": "Entering %s",
+	"mapplus.nation.leaving": "Leaving %s",
+	"mapplus.map.cave": "Cave Map (Y %s)"
 }

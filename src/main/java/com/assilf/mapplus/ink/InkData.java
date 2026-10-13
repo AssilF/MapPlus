@@ -26,7 +26,8 @@ public final class InkData extends SavedData {
 	private static final Codec<InkData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
 			Codec.INT.optionalFieldOf("data_version", DATA_VERSION).forGetter(data -> DATA_VERSION),
 			Codec.unboundedMap(Codec.STRING, InkLayer.CODEC).optionalFieldOf("maps", Map.of()).forGetter(InkData::encodeLayers),
-			Codec.unboundedMap(Codec.STRING, UUIDUtil.CODEC).optionalFieldOf("makers", Map.of()).forGetter(InkData::encodeMakers)
+			Codec.unboundedMap(Codec.STRING, UUIDUtil.CODEC).optionalFieldOf("makers", Map.of()).forGetter(InkData::encodeMakers),
+			Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("depths", Map.of()).forGetter(InkData::encodeDepths)
 	).apply(instance, InkData::new));
 
 	private static final SavedDataType<InkData> TYPE = new SavedDataType<>(
@@ -39,11 +40,20 @@ public final class InkData extends SavedData {
 	private final Map<Integer, InkLayer> layers = new HashMap<>();
 	/** Who made each map, where known: whoever first used the empty map, or drew the blank canvas. */
 	private final Map<Integer, UUID> makers = new HashMap<>();
+	/** The level each cave map shows, by map id. */
+	private final Map<Integer, Integer> depths = new HashMap<>();
 
 	public InkData() {
 	}
 
-	private InkData(int dataVersion, Map<String, InkLayer> encoded, Map<String, UUID> encodedMakers) {
+	private InkData(int dataVersion, Map<String, InkLayer> encoded, Map<String, UUID> encodedMakers, Map<String, Integer> encodedDepths) {
+		encodedDepths.forEach((key, depth) -> {
+			try {
+				depths.put(Integer.parseInt(key), depth);
+			} catch (NumberFormatException e) {
+				MapPlus.LOGGER.warn("Skipping cave level saved under bad map id {}", key);
+			}
+		});
 		encoded.forEach((key, layer) -> {
 			try {
 				layers.put(Integer.parseInt(key), layer);
@@ -74,6 +84,24 @@ public final class InkData extends SavedData {
 		Map<String, UUID> encoded = new HashMap<>();
 		makers.forEach((id, maker) -> encoded.put(Integer.toString(id), maker));
 		return encoded;
+	}
+
+	private Map<String, Integer> encodeDepths() {
+		Map<String, Integer> encoded = new HashMap<>();
+		depths.forEach((id, depth) -> encoded.put(Integer.toString(id), depth));
+		return encoded;
+	}
+
+	/** The level a cave map shows, or null if it's an ordinary map of the surface. */
+	public Integer depth(MapId mapId) {
+		return depths.get(mapId.id());
+	}
+
+	public void setDepth(MapId mapId, Integer depth) {
+		if (depth != null) {
+			depths.put(mapId.id(), depth);
+			setDirty();
+		}
 	}
 
 	public UUID maker(MapId mapId) {

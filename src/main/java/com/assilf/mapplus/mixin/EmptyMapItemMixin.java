@@ -1,6 +1,7 @@
 package com.assilf.mapplus.mixin;
 
 import com.assilf.mapplus.ink.InkData;
+import com.assilf.mapplus.survey.CaveMaps;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
@@ -15,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Remembers who made each map, so the maker can always scrape a seal off it,
- * whoever sealed it. Kept in MapPlus's own data; the map itself doesn't change.
+ * whoever sealed it, and makes maps used deep underground cave maps of that
+ * level. Kept in MapPlus's own data.
  */
 @Mixin(EmptyMapItem.class)
 public abstract class EmptyMapItemMixin {
@@ -25,6 +27,9 @@ public abstract class EmptyMapItemMixin {
 		MapId mapId = map.get(DataComponents.MAP_ID);
 		if (mapId != null && level instanceof ServerLevel serverLevel) {
 			InkData.get(serverLevel.getServer()).setMaker(mapId, player.getUUID());
+			if (CaveMaps.isUnderground(serverLevel, player)) {
+				CaveMaps.makeCaveMap(serverLevel, player, map);
+			}
 		}
 		return map;
 	}
