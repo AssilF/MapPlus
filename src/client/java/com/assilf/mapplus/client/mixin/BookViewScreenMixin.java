@@ -62,9 +62,6 @@ public abstract class BookViewScreenMixin extends Screen implements AtlasBookScr
 	@Shadow
 	public abstract boolean setPage(int page);
 
-	@Shadow
-	protected abstract boolean forcePage(int page);
-
 	@Unique
 	private Atlas mapplus$atlas() {
 		return Atlas.read(AtlasSpread.source(bookAccess)).orElse(null);
@@ -89,11 +86,12 @@ public abstract class BookViewScreenMixin extends Screen implements AtlasBookScr
 		mapplus$measured = true;
 	}
 
+	/** A held atlas opens on the notes facing its first map. A lectern's page is shared, so it is left alone. */
 	@Inject(method = "init", at = @At("TAIL"))
 	private void mapplus$openOnNotes(CallbackInfo ci) {
 		Atlas atlas = mapplus$atlas();
-		if (atlas != null && !AtlasSpread.isStop(atlas, currentPage, bookAccess.getPageCount())) {
-			forcePage(AtlasSpread.firstStop(atlas, currentPage, bookAccess.getPageCount()));
+		if (atlas != null && !((Object) this instanceof LecternScreen) && !AtlasSpread.isStop(atlas, currentPage, bookAccess.getPageCount())) {
+			setPage(AtlasSpread.firstStop(atlas, currentPage, bookAccess.getPageCount()));
 		}
 	}
 
@@ -124,10 +122,7 @@ public abstract class BookViewScreenMixin extends Screen implements AtlasBookScr
 		if (atlas == null) {
 			return -2;
 		}
-		int pageCount = bookAccess.getPageCount();
-		return forward
-				? AtlasSpread.nextStop(atlas, currentPage, pageCount)
-				: AtlasSpread.previousStop(atlas, currentPage, pageCount);
+		return AtlasSpread.turnTarget(atlas, currentPage, bookAccess.getPageCount(), forward);
 	}
 
 	@Inject(method = "pageForward", at = @At("HEAD"), cancellable = true)

@@ -1,5 +1,7 @@
 package com.assilf.mapplus.atlas;
 
+import com.assilf.mapplus.MapPlus;
+import com.assilf.mapplus.ink.MapViewers;
 import com.assilf.mapplus.net.AtlasPagePayload;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -13,7 +15,6 @@ import net.minecraft.world.inventory.LecternMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
-import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
 import java.util.Optional;
@@ -61,9 +62,12 @@ public final class AtlasManager {
 				}
 			}
 			for (InteractionHand hand : InteractionHand.values()) {
-				Atlas.read(player.getItemInHand(hand)).ifPresent(atlas -> explore(player, atlas));
+				ItemStack held = player.getItemInHand(hand);
+				if (Atlas.isOriginal(held)) {
+					Atlas.read(held).ifPresent(atlas -> explore(player, atlas));
+				}
 			}
-			if (player.containerMenu instanceof LecternMenu lectern) {
+			if (player.containerMenu instanceof LecternMenu lectern && MapPlus.hasMod(player)) {
 				Atlas.read(lectern.getBook()).ifPresent(atlas -> view(player, atlas));
 			}
 		}
@@ -71,10 +75,11 @@ public final class AtlasManager {
 
 	/**
 	 * Treats the atlas's maps like maps carried in the inventory: the player shows
-	 * on them and receives their updates.
+	 * on them and, with the mod, receives their updates to see them in the book.
 	 */
 	private static void carry(ServerPlayer player, Atlas atlas) {
 		ServerLevel level = player.level();
+		boolean shown = MapPlus.hasMod(player);
 		for (Atlas.Plate plate : atlas.plates()) {
 			MapItemSavedData map = level.getMapData(plate.id());
 			if (map == null) {
@@ -83,11 +88,19 @@ public final class AtlasManager {
 			// The stitched item carries explorer and treasure markers, which vanilla
 			// re-applies from the carried stack.
 			map.tickCarriedBy(player, plate.mapStack(level.registryAccess()), null);
-			send(player, map, plate.id());
+			if (shown) {
+				Packet<?> packet = map.getUpdatePacket(plate.id(), player);
+				if (packet != null) {
+					player.connection.send(packet);
+				}
+			}
 		}
 	}
 
-	/** A held atlas explores with its selected map, like a held map. */
+	/**
+	 * A held atlas explores with its selected map, like a held map. Only the
+	 * original does: copies show the maps but don't fill them in.
+	 */
 	private static void explore(ServerPlayer player, Atlas atlas) {
 		atlas.selectedPlate().ifPresent(plate -> {
 			MapItemSavedData map = player.level().getMapData(plate.id());
@@ -102,16 +115,8 @@ public final class AtlasManager {
 		for (Atlas.Plate plate : atlas.plates()) {
 			MapItemSavedData map = player.level().getMapData(plate.id());
 			if (map != null) {
-				map.getHoldingPlayer(player);
-				send(player, map, plate.id());
+				MapViewers.view(player, plate.id(), map);
 			}
-		}
-	}
-
-	private static void send(ServerPlayer player, MapItemSavedData map, MapId mapId) {
-		Packet<?> packet = map.getUpdatePacket(mapId, player);
-		if (packet != null) {
-			player.connection.send(packet);
 		}
 	}
 }

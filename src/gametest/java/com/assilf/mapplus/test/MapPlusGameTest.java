@@ -306,6 +306,56 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
+	/** Locking a map with a glass pane makes a new map; its ink and seal come along. */
+	@GameTest
+	public void lockingKeepsInk(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		data.getOrCreate(mapId).set(40 + 50 * Ink.SIZE, Ink.encode(DyeColor.ORANGE, false));
+		data.setSealed(mapId, true);
+
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.GLASS_PANE));
+		ItemStack locked = menu.getSlot(CartographyTableMenu.RESULT_SLOT).safeTake(1, Integer.MAX_VALUE, player);
+		MapId lockedId = locked.get(DataComponents.MAP_ID);
+		helper.assertTrue(lockedId != null && !lockedId.equals(mapId), Component.literal("locking makes a new map"));
+		helper.assertValueEqual(data.find(lockedId).get(40 + 50 * Ink.SIZE), Ink.encode(DyeColor.ORANGE, false), Component.literal("ink on the locked map"));
+		helper.assertTrue(data.isSealed(lockedId), Component.literal("seal on the locked map"));
+		helper.succeed();
+	}
+
+	/** Zooming a map out with paper shrinks its ink into the bigger map. */
+	@GameTest
+	public void zoomingKeepsInk(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		InkLayer layer = data.getOrCreate(mapId);
+		for (int i = 0; i < Ink.SIZE; i++) {
+			layer.set(i + 64 * Ink.SIZE, Ink.encode(DyeColor.BLUE, false));
+		}
+
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.PAPER));
+		ItemStack zoomed = menu.getSlot(CartographyTableMenu.RESULT_SLOT).safeTake(1, Integer.MAX_VALUE, player);
+		MapId zoomedId = zoomed.get(DataComponents.MAP_ID);
+		helper.assertTrue(zoomedId != null && !zoomedId.equals(mapId), Component.literal("zooming makes a new map"));
+		InkLayer shrunk = data.find(zoomedId);
+		int inked = 0;
+		for (int i = 0; i < Ink.PIXELS; i++) {
+			if (Ink.isPresent(shrunk.get(i))) {
+				inked++;
+			}
+		}
+		helper.assertValueEqual(inked, Ink.SIZE / 2, Component.literal("a 128 pixel line becomes 64 pixels"));
+		helper.succeed();
+	}
+
 	/** Shift-clicking a dye at the table puts it in the second slot. */
 	@GameTest
 	public void shiftClickPutsDyesInTheSecondSlot(GameTestHelper helper) {

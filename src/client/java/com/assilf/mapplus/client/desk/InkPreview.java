@@ -53,6 +53,18 @@ final class InkPreview {
 		}
 	}
 
+	/** Marks pending pixels in a copy of the map's colors with a color no map uses. */
+	void stamp(byte[] mapColors) {
+		if (count == 0) {
+			return;
+		}
+		for (int i = 0; i < Ink.PIXELS; i++) {
+			if (colors[i] != 0) {
+				mapColors[i] = (byte) 0xFF;
+			}
+		}
+	}
+
 	void clear() {
 		Arrays.fill(colors, 0);
 		count = 0;

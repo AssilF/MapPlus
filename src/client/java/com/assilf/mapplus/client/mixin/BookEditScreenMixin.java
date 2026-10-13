@@ -164,9 +164,7 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 		if (mapplus$atlas == null) {
 			return -2;
 		}
-		return forward
-				? AtlasSpread.nextStop(mapplus$atlas, currentPage, pages.size())
-				: AtlasSpread.previousStop(mapplus$atlas, currentPage, pages.size());
+		return AtlasSpread.turnTarget(mapplus$atlas, currentPage, pages.size(), forward);
 	}
 
 	@Inject(method = "pageForward", at = @At("HEAD"), cancellable = true)

@@ -120,6 +120,20 @@ public final class AtlasSpread {
 		return -1;
 	}
 
+	/**
+	 * The page turning forward or back lands on, or -1 for none. Turning starts
+	 * from the spread rather than the page, so a book open on a map page (as a
+	 * lectern can be) turns to the next spread, not to the map's own notes.
+	 */
+	public static int turnTarget(Atlas atlas, int page, int pageCount, boolean forward) {
+		int from = page;
+		int partner = Atlas.partner(page);
+		if (!isStop(atlas, page, pageCount) && partner < pageCount && isStop(atlas, partner, pageCount)) {
+			from = partner;
+		}
+		return forward ? nextStop(atlas, from, pageCount) : previousStop(atlas, from, pageCount);
+	}
+
 	/** The first page to show when the book opens. */
 	public static int firstStop(Atlas atlas, int page, int pageCount) {
 		if (isStop(atlas, page, pageCount)) {

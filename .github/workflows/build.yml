@@ -36,9 +36,19 @@ jobs:
           path: build/libs/
       - name: client game tests
         if: ${{ inputs.inspect == '' }}
+        timeout-minutes: 20
         run: |
-          sudo apt-get install -y -qq xvfb > /dev/null
-          xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew runClientGameTest --stacktrace
+          # Loom starts its own virtual display in CI, as Fabric API's own client tests do.
+          sudo apt-get update -qq > /dev/null
+          sudo apt-get install -y -qq xvfb mesa-vulkan-drivers > /dev/null
+          ./gradlew runClientGameTest --stacktrace
+      - name: print client log
+        if: ${{ always() && inputs.inspect == '' }}
+        run: |
+          find build/run -name 'latest.log' | while read -r f; do
+            echo "--- $f"
+            tail -n 400 "$f"
+          done
       - name: print screenshots
         if: ${{ always() && inputs.inspect == '' }}
         run: |

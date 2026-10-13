@@ -21,6 +21,9 @@ import java.util.Optional;
 public abstract class BookAccessMixin {
 	@ModifyReturnValue(method = "fromItem", at = @At("RETURN"))
 	private static BookViewScreen.BookAccess mapplus$atlasPages(BookViewScreen.BookAccess access, ItemStack stack) {
+		if (access == null) {
+			return null;
+		}
 		Optional<Atlas> read = Atlas.read(stack);
 		if (read.isEmpty()) {
 			return access;

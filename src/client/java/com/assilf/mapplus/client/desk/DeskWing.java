@@ -77,6 +77,7 @@ public final class DeskWing {
 	private int penSeq;
 	/** The line or box being dragged out. */
 	private final BitSet shape = new BitSet(Ink.PIXELS);
+	private double scrolled;
 
 	public DeskWing(CartographyTableScreen screen) {
 		this.screen = screen;
@@ -104,14 +105,17 @@ public final class DeskWing {
 		return InkMaterial.of(menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem());
 	}
 
-	/** The map shown on the canvas, or null for a blank canvas or no map. */
+	/**
+	 * The map shown on the canvas, or null for a blank canvas or no map. On an
+	 * empty map, the drawing is whatever the server put in the result slot.
+	 */
 	private MapId shownMap() {
 		ItemStack input = input();
 		if (input.is(Items.FILLED_MAP)) {
 			return input.get(DataComponents.MAP_ID);
 		}
-		int canvas = DeskState.get().canvasId();
-		return input.is(Items.MAP) && canvas >= 0 ? new MapId(canvas) : null;
+		ItemStack result = menu().getSlot(CartographyTableMenu.RESULT_SLOT).getItem();
+		return input.is(Items.MAP) && result.is(Items.FILLED_MAP) ? result.get(DataComponents.MAP_ID) : null;
 	}
 
 	private boolean hasCanvas() {
@@ -143,12 +147,13 @@ public final class DeskWing {
 		return over(mouseX, mouseY, CANVAS_X, CANVAS_Y, Ink.SIZE, Ink.SIZE);
 	}
 
+	/** The canvas pixel under the mouse; outside the canvas while dragging, so strokes are cut at its edge. */
 	private int pixelX(double mouseX) {
-		return Math.clamp((int) Math.floor(mouseX - left() - CANVAS_X), 0, Ink.SIZE - 1);
+		return (int) Math.floor(mouseX - left() - CANVAS_X);
 	}
 
 	private int pixelY(double mouseY) {
-		return Math.clamp((int) Math.floor(mouseY - top() - CANVAS_Y), 0, Ink.SIZE - 1);
+		return (int) Math.floor(mouseY - top() - CANVAS_Y);
 	}
 
 	private int toolX(int index) {
@@ -249,6 +254,9 @@ public final class DeskWing {
 			int width = Math.round(13 * left);
 			graphics.fill(x, y, x + 13, y + 2, 0xFF000000);
 			graphics.fill(x, y, x + width, y + 1, barColor(left));
+			// The stack count stays readable on top, as over a durability bar.
+			ItemStack stack = menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem();
+			graphics.itemDecorations(minecraft.font, stack, left() + 15, top() + 52, null);
 		}
 
 		if (overCanvas(mouseX, mouseY) && !drawing) {
@@ -339,8 +347,9 @@ public final class DeskWing {
 		if (!drawing) {
 			return false;
 		}
-		int x = pixelX(mouseX);
-		int y = pixelY(mouseY);
+		// Far enough out to cover any drag, close enough that lines stay cheap.
+		int x = Math.clamp(pixelX(mouseX), -Ink.SIZE, Ink.SIZE * 2);
+		int y = Math.clamp(pixelY(mouseY), -Ink.SIZE, Ink.SIZE * 2);
 		if (tool == DeskTool.PEN) {
 			penDab(lastX, lastY, x, y);
 			lastX = x;
@@ -367,10 +376,19 @@ public final class DeskWing {
 	}
 
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-		if (!overCanvas(mouseX, mouseY) || amount == 0) {
+		if (!overCanvas(mouseX, mouseY)) {
 			return false;
 		}
-		brush = Math.clamp(brush + (amount > 0 ? 1 : -1), 1, 3);
+		// Touchpads scroll in small steps; change the brush once per whole step.
+		if (Math.signum(amount) != Math.signum(scrolled)) {
+			scrolled = 0;
+		}
+		scrolled += amount;
+		int steps = (int) scrolled;
+		if (steps != 0) {
+			scrolled -= steps;
+			brush = Math.clamp(brush + steps, 1, 3);
+		}
 		return true;
 	}
 
@@ -389,7 +407,7 @@ public final class DeskWing {
 		preview.acknowledge(ack);
 	}
 
-	/** Sends what the pen drew before the window closed. */
+	/** Sends what the pen drew, before the window tells the server it closed. */
 	public void close() {
 		flushPen();
 		drawing = false;
@@ -428,8 +446,15 @@ public final class DeskWing {
 	}
 
 	private void fill(int x, int y) {
-		MapItemSavedData data = mapData(shownMap());
-		byte[] colors = data == null ? new byte[Ink.PIXELS] : data.colors;
+		MapId mapId = shownMap();
+		MapItemSavedData data = mapData(mapId);
+		if (mapId != null && data == null) {
+			// The map hasn't arrived yet; filling now would flood all of it.
+			return;
+		}
+		byte[] colors = data == null ? new byte[Ink.PIXELS] : data.colors.clone();
+		// Strokes not back from the server yet still bound the fill.
+		preview.stamp(colors);
 		BitSet pixels = new BitSet(Ink.PIXELS);
 		Strokes.fill(pixels, colors, x, y);
 		send(pixels, true);
@@ -454,21 +479,17 @@ public final class DeskWing {
 	/** A rough check before sending, so a shape that can't be paid for doesn't flash on the canvas. */
 	private boolean affordable(int pixels, InkMaterial material) {
 		InkStatePayload state = DeskState.get();
-		if (state.free()) {
+		// Glow ink and water only cost on inked pixels, which the client can't tell apart.
+		if (state.free() || material.kind() != InkMaterial.Kind.DYE) {
 			return true;
 		}
 		ItemStack stack = menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem();
-		return state.charge() + (long) stack.getCount() * material.perItem() >= pixels;
+		return state.charge() + (long) stack.getCount() * state.perItem() >= pixels;
 	}
 
 	private int strokeTarget() {
-		ItemStack input = input();
-		if (input.is(Items.FILLED_MAP)) {
-			MapId mapId = input.get(DataComponents.MAP_ID);
-			return mapId == null ? InkStrokePayload.NEW_CANVAS : mapId.id();
-		}
-		int canvas = DeskState.get().canvasId();
-		return canvas >= 0 ? canvas : InkStrokePayload.NEW_CANVAS;
+		MapId mapId = shownMap();
+		return mapId == null ? InkStrokePayload.NEW_CANVAS : mapId.id();
 	}
 
 	private void click() {

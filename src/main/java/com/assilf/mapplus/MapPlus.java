@@ -4,6 +4,7 @@ import com.assilf.mapplus.atlas.AtlasManager;
 import com.assilf.mapplus.ink.CauldronWashing;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkSupply;
+import com.assilf.mapplus.ink.MapViewers;
 import com.assilf.mapplus.net.AtlasPagePayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
@@ -36,6 +37,7 @@ public class MapPlus implements ModInitializer {
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
 
 		InkManager.register();
+		MapViewers.register();
 		CauldronWashing.register();
 		SpyglassSurvey.register();
 		AtlasManager.register();

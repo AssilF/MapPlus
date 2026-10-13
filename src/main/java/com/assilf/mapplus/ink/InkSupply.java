@@ -34,7 +34,7 @@ public record InkSupply(int[] dyes, int glow, int water) {
 
 	public static final AttachmentType<InkSupply> ATTACHMENT = AttachmentRegistry.create(
 			MapPlus.id("ink_supply"),
-			builder -> builder.persistent(CODEC).initializer(() -> EMPTY)
+			builder -> builder.persistent(CODEC).copyOnDeath().initializer(() -> EMPTY)
 	);
 
 	public int dye(DyeColor dye) {

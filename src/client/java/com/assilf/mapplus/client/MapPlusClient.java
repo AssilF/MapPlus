@@ -68,7 +68,18 @@ public class MapPlusClient implements ClientModInitializer {
 		ScreenMouseEvents.allowMouseDrag(table).register((screen, event, dx, dy) -> !desk.mouseDragged(event.x(), event.y(), event.button()));
 		ScreenMouseEvents.allowMouseRelease(table).register((screen, event) -> !desk.mouseReleased(event.x(), event.y(), event.button()));
 		ScreenMouseEvents.allowMouseScroll(table).register((screen, mouseX, mouseY, horizontal, vertical) -> !desk.mouseScrolled(mouseX, mouseY, vertical));
-		ScreenEvents.remove(table).register(screen -> desk.close());
+		ScreenEvents.remove(table).register(screen -> {
+			desk.close();
+			WINGS.remove(screen);
+		});
+	}
+
+	/** Sends what's left of a pen stroke before the table window closes. */
+	public static void beforeClose(Screen screen) {
+		DeskWing wing = WINGS.get(screen);
+		if (wing != null) {
+			wing.close();
+		}
 	}
 
 	/** A held atlas explores with the map it was closed on. */

@@ -15,6 +15,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.WritableBookContent;
+import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.level.saveddata.maps.MapId;
 
 import java.util.ArrayList;
@@ -125,6 +126,12 @@ public record Atlas(List<Plate> plates, int selected) {
 
 	public static boolean isAtlas(ItemStack stack) {
 		return read(stack).isPresent();
+	}
+
+	/** Whether this is the atlas itself rather than a copy of a signed one. */
+	public static boolean isOriginal(ItemStack stack) {
+		WrittenBookContent written = stack.get(DataComponents.WRITTEN_BOOK_CONTENT);
+		return written == null || written.generation() == 0;
 	}
 
 	public void write(ItemStack stack) {

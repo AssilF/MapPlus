@@ -1,14 +1,18 @@
 package com.assilf.mapplus.ink;
 
+import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.mixin.MapItemSavedDataAccessor;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
+import com.assilf.mapplus.survey.MapPixels;
+import com.mojang.serialization.Codec;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,6 +21,7 @@ import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
@@ -32,6 +37,15 @@ import java.util.UUID;
  */
 public final class InkManager {
 	private static final Map<UUID, Session> SESSIONS = new HashMap<>();
+
+	/**
+	 * A drawing on an empty map the player left at a table without an empty map
+	 * to keep it on. It shows on the next empty map they put on a table.
+	 */
+	public static final AttachmentType<Integer> PENDING_CANVAS = AttachmentRegistry.create(
+			MapPlus.id("pending_canvas"),
+			builder -> builder.persistent(Codec.INT).copyOnDeath()
+	);
 
 	private InkManager() {
 	}
@@ -174,11 +188,7 @@ public final class InkManager {
 			if (mapId != null) {
 				MapItemSavedData map = player.level().getMapData(mapId);
 				if (map != null) {
-					map.getHoldingPlayer(player);
-					Packet<?> packet = map.getUpdatePacket(mapId, player);
-					if (packet != null) {
-						player.connection.send(packet);
-					}
+					MapViewers.view(player, mapId, map);
 				}
 				sealed = InkData.get(server).isSealed(mapId);
 			}
@@ -227,6 +237,37 @@ public final class InkManager {
 		return true;
 	}
 
+	/**
+	 * Brings a map's ink and seal over to the new map made by locking it (same
+	 * area, copied as is) or zooming it out (twice the area, each 2 by 2 block
+	 * of ink shrinks into one pixel of the new map).
+	 */
+	public static void carryInk(ServerLevel level, MapId from, MapId to) {
+		InkData data = InkData.get(level.getServer());
+		InkLayer source = data.find(from);
+		MapItemSavedData oldMap = level.getMapData(from);
+		MapItemSavedData newMap = level.getMapData(to);
+		if (source == null || oldMap == null || newMap == null) {
+			return;
+		}
+		InkLayer target = data.getOrCreate(to);
+		target.setSealed(source.isSealed());
+		int oldScale = MapPixels.scaleBlocks(oldMap);
+		for (int i = 0; i < Ink.PIXELS; i++) {
+			byte ink = source.get(i);
+			if (!Ink.isPresent(ink)) {
+				continue;
+			}
+			int x = MapPixels.pixelX(newMap, MapPixels.worldX(oldMap, i % Ink.SIZE) + oldScale / 2);
+			int y = MapPixels.pixelZ(newMap, MapPixels.worldZ(oldMap, i / Ink.SIZE) + oldScale / 2);
+			if (x >= 0 && y >= 0 && x < Ink.SIZE && y < Ink.SIZE && !Ink.isPresent(target.get(x + y * Ink.SIZE))) {
+				target.set(x + y * Ink.SIZE, ink);
+			}
+		}
+		data.setDirty();
+		markDirty(newMap, 0, 0, Ink.SIZE - 1, Ink.SIZE - 1);
+	}
+
 	/** Makes every player who sees this map receive these pixels again. */
 	private static void markDirty(MapItemSavedData map, int minX, int minY, int maxX, int maxY) {
 		MapItemSavedDataAccessor accessor = (MapItemSavedDataAccessor) map;
@@ -273,10 +314,15 @@ public final class InkManager {
 				if (!material.equals(InkMaterial.of(stack))) {
 					return false;
 				}
+				source.remove(1);
 				if (material.kind() == InkMaterial.Kind.WATER) {
-					source.set(new ItemStack(Items.GLASS_BOTTLE));
-				} else {
-					source.remove(1);
+					// The emptied bottle takes the water bottle's place, or goes to the player.
+					ItemStack bottle = new ItemStack(Items.GLASS_BOTTLE);
+					if (source.getItem().isEmpty()) {
+						source.set(bottle);
+					} else if (!player.getInventory().add(bottle)) {
+						Block.popResource(player.level(), player.blockPosition(), bottle);
+					}
 				}
 				charge += material.perItem();
 			}

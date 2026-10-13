@@ -2,6 +2,7 @@ package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.ink.InkData;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -27,6 +28,7 @@ import net.minecraft.world.item.MapItem;
 import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
 import java.util.List;
@@ -98,6 +100,18 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.takeScreenshot("desk_hint");
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(2);
+			// Closing the table didn't lose the drawing: it's in the inventory.
+			boolean keptDrawing = server.computeOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				InkData ink = InkData.get(minecraft);
+				return player.getInventory().contains(stack -> {
+					MapId mapId = stack.get(DataComponents.MAP_ID);
+					return stack.is(Items.FILLED_MAP) && mapId != null && ink.find(mapId) != null && !ink.find(mapId).isEmpty();
+				});
+			});
+			if (!keptDrawing) {
+				throw new AssertionError("Closing the table should give back the drawing on the empty map");
+			}
 
 			// An atlas: notes on the left facing a map, then a map facing new notes.
 			server.runOnServer(minecraft -> {

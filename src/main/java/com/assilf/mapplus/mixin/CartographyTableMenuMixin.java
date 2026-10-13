@@ -5,8 +5,10 @@ import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.ink.DeskSlot;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.ink.InkData;
+import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkMaterial;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
@@ -20,6 +22,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -55,6 +58,9 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	public Container container;
 
 	@Unique
+	private Player mapplus$player;
+
+	@Unique
 	private boolean mapplus$desk;
 
 	@Unique
@@ -66,9 +72,15 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 
 	@Inject(method = "<init>(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/inventory/ContainerLevelAccess;)V", at = @At("TAIL"))
 	private void mapplus$init(int containerId, Inventory inventory, ContainerLevelAccess levelAccess, CallbackInfo ci) {
+		mapplus$player = inventory.player;
 		mapplus$desk = MapPlus.hasMod(inventory.player);
 		((DeskSlot) slots.get(CartographyTableMenu.MAP_SLOT)).mapplus$setDesk(this);
 		((DeskSlot) slots.get(CartographyTableMenu.ADDITIONAL_SLOT)).mapplus$setDesk(this);
+		// A drawing left unfinished at another table carries on here.
+		Integer pending = mapplus$desk ? inventory.player.getAttached(InkManager.PENDING_CANVAS) : null;
+		if (pending != null && inventory.player.level().getMapData(new MapId(pending)) != null) {
+			mapplus$canvas = new MapId(pending);
+		}
 	}
 
 	@Override
@@ -89,7 +101,36 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	@Override
 	public void mapplus$setCanvas(MapId canvas) {
 		mapplus$canvas = canvas;
+		if (mapplus$player instanceof ServerPlayer) {
+			if (canvas == null) {
+				mapplus$player.removeAttached(InkManager.PENDING_CANVAS);
+			} else {
+				mapplus$player.setAttached(InkManager.PENDING_CANVAS, canvas.id());
+			}
+		}
 		slotsChanged(container);
+	}
+
+	/**
+	 * Closing the table with a drawing on an empty map gives back the drawing
+	 * instead of that empty map, as if the result had been taken. Without an
+	 * empty map left in the slot, the drawing waits for the player's next one.
+	 */
+	@Inject(method = "removed", at = @At("HEAD"))
+	private void mapplus$keepDrawing(Player player, CallbackInfo ci) {
+		if (!mapplus$desk || mapplus$canvas == null || !(player instanceof ServerPlayer serverPlayer)
+				|| !container.getItem(CartographyTableMenu.MAP_SLOT).is(Items.MAP)) {
+			return;
+		}
+		ItemStack drawing = DrawingDesk.canvasItem(mapplus$canvas);
+		mapplus$setCanvas(null);
+		container.removeItem(CartographyTableMenu.MAP_SLOT, 1);
+		if (container.getItem(CartographyTableMenu.MAP_SLOT).isEmpty()) {
+			// Returned with the other inputs by vanilla.
+			container.setItem(CartographyTableMenu.MAP_SLOT, drawing);
+		} else if (!serverPlayer.isAlive() || serverPlayer.hasDisconnected() || !serverPlayer.getInventory().add(drawing)) {
+			Block.popResource(serverPlayer.level(), serverPlayer.blockPosition(), drawing);
+		}
 	}
 
 	/** With an empty map in the first slot, the result is the drawing on it, whatever the second slot holds. */

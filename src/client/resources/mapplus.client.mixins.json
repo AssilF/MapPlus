@@ -4,9 +4,11 @@
 	"compatibilityLevel": "JAVA_25",
 	"client": [
 		"AbstractContainerScreenAccessor",
+		"AbstractContainerScreenMixin",
 		"BookAccessMixin",
 		"BookEditScreenMixin",
 		"BookViewScreenMixin",
+		"CartographyTableScreenMixin",
 		"LecternScreenMixin"
 	],
 	"injectors": {

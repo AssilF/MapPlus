@@ -52,6 +52,9 @@ the mod get the plain vanilla table.
 - **Canvas:** with a map in the top slot, the wing shows it at full size and
   you draw on it directly. An **empty map** in the top slot is a blank canvas;
   the drawing appears in the result slot, and taking it uses one empty map.
+  Closing the table gives the drawing back in place of that empty map (or, with
+  no empty map left in the slot, keeps it for the player's next one).
+- Locking and zooming at the table carry the ink over to the new map.
 - **The second slot is the material.** What you put there decides what the
   mouse does on the canvas:
 
@@ -101,7 +104,7 @@ writing, signing or copying changes.
   (or after removal) see.
 - **Exploring:** a held atlas explores with the map of the spread it was last
   closed on, as if that map were held. Closing it on a spread without a map
-  stops that.
+  stops that. Copies of a signed atlas show the maps but don't explore.
 - No drawing, sketching or map making inside the atlas: that's the cartography
   table's job.
 - **Later:** table of contents from zone and pin names; stitched overview.

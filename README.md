@@ -8,10 +8,11 @@ A Fabric mod for Minecraft 26.3 that extends vanilla cartography for planning bu
 With the mod on both sides, the cartography table window gets a drawing desk on its right: the map in the top slot, at full size, to draw on directly.
 
 - **What draws is what's in the second slot:** a dye draws in its color (an ink sac draws black), a glow ink sac makes ink glow, a water bottle erases. One item covers 256 pixels; the bar on the item shows what's left of it.
-- **Empty map:** put an empty map in the top slot to draw on a blank canvas. The drawing is the result; taking it uses up one empty map.
+- **Empty map:** put an empty map in the top slot to draw on a blank canvas. The drawing is the result; taking it uses up one empty map. Closing the table gives you the drawing in place of that empty map, so nothing you paid ink for is lost.
 - **Tools:** pen, line, box and fill, under the map. Scroll over the map, or use the buttons on the right, to change the brush size (1 to 3).
 - **Seal:** honeycomb in the second slot seals a map's ink against drawing and washing; an axe scrapes the seal off (and takes damage).
 - Shift-click dyes, ink sacs, water bottles, honeycomb, axes and books into the second slot.
+- Locking a map (glass pane) keeps its ink; zooming it out (paper) shrinks the ink onto the bigger map.
 - Use a map on a water cauldron to wash all its ink off.
 - Every copy of a map shows the same ink, including maps in item frames, and players without the mod see it too.
 
@@ -21,7 +22,7 @@ Put a filled map in the cartography table's top slot and a book and quill in the
 The atlas opens in the vanilla book and quill screen. Each stitched map shows on the page facing its notes, on the left or the right depending on where it was stitched: a map stitched after a left page faces it from the right; otherwise it starts a new spread on the left, with an empty page for notes on the right.
 
 - **Notes:** write as in any book. Sign it to make it read-only; signed atlases can be copied like written books and read on lecterns.
-- **Explore:** held, the atlas keeps filling in the map of the spread it was last closed on, like a held map.
+- **Explore:** held, the atlas keeps filling in the map of the spread it was last closed on, like a held map. Copies show the maps but don't fill them in.
 
 Removing the mod leaves the atlas as an ordinary book: notes intact, map pages showing the map's name.
 
