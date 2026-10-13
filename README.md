@@ -48,7 +48,17 @@ The atlas opens in the vanilla book and quill screen. Each stitched map shows on
 Removing the mod leaves the atlas as an ordinary book: notes intact, map pages showing the map's name.
 
 ### Spyglass survey
-Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too.
+Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too. With the mod, the map shows in the top right corner while you look, and scrolling zooms the spyglass in and out.
+
+### Nations
+Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post, out to 48 blocks, is the nation's on every map: borders in the nation's color with a light tint inside. Land floods out from the posts, so neighbors meet halfway, and rivers and coasts make natural borders. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
+
+### Caves and the echo
+- **Cave maps:** use an empty map deep underground and it maps the level you're standing on, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself. It fills in around you while you're on that level, and is named for it.
+- **The echo:** use an amethyst shard with a map in your other hand: it rings, and the land around you fills in at once, even through rock: the caves on a cave map, the surface on any other. An echo shard rings twice as far.
+
+### Foresight
+A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon. Only you see it; nothing is placed in the world.
 
 ## Installation
 Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client, or both:
@@ -69,6 +79,14 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `maxPinsPerMap` | 32 | Pins and icons one map can carry |
 | `sealsAreOwned` | true | Only the sealer, the map's maker or an operator can scrape a seal off |
 | `logMarks` | true | Log each label, pin and icon placed or removed, and who did it |
+| `nations` | true | Named banners put up in the world are nations' border posts |
+| `postReach` | 48 | How far a border post holds land, in blocks |
+| `nationsOnMaps` | true | Maps show nations' borders and land |
+| `nationMessages` | true | Say "Entering …" in the action bar when crossing a border |
+| `caveMaps` | true | Empty maps used deep underground map that level |
+| `caveMapReach` | 16 | How far around you a held cave map fills in, in blocks |
+| `echoReach` | 24 | How far an amethyst shard's ring fills in a map, in blocks (an echo shard: twice) |
+| `echoCooldown` | 40 | Ticks before a shard can ring again |
 | `spyglassSurvey` | true | Spyglass fills held maps |
 | `surveyPixelsPerTick` | 48 | Map pixels surveyed per tick per player |
 | `surveyRangeMultiplier` | 2.0 | Survey range, as a multiple of the view distance |
@@ -76,7 +94,7 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `surveyChunksPerTick` | 2 | Chunks loaded per tick per player while surveying |
 
 ## Removing the mod
-Maps keep their own colors; ink is stored separately in `world/data/mapplus/` and simply stops showing. The only lasting change is terrain the spyglass generated, which is ordinary vanilla terrain. Set `spyglassGeneratesChunks` to `false` to avoid that.
+Maps keep their own colors; ink, marks and nations are stored separately in `world/data/mapplus/` and simply stop showing. Cave maps keep what they've mapped, but fill in the surface from then on. The only lasting change is terrain the spyglass generated, which is ordinary vanilla terrain. Set `spyglassGeneratesChunks` to `false` to avoid that.
 
 ## Building
 ```

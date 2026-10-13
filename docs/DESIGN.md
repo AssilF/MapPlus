@@ -754,6 +754,45 @@ Fabric split client/common source sets plus the Fabric API.
 7. Enchantment and in-world projection; vanilla client fallbacks
 8. Client-only mode, PNG export, uninstall command
 
+## Built: nations, caves, the echo, the spyglass and Foresight
+
+Where the build differs from the plans below:
+
+- **Nations come from banners alone.** Only a *named* banner put up in the world
+  is a border post, so decorative banners don't claim land. A nation is a banner
+  design (base color and patterns); its name is the name on its most recent
+  post. A post holds land out to `postReach` (48) blocks. On each map, land
+  floods out from the posts over the map's own pixels: costs grow with distance
+  (diagonals cost more), so neighbors meet halfway, and water pixels and
+  unexplored ones stop the flood. Every map shows it, not a separate political
+  map: borders in the nation's dark shade, the land inside as the faintest tint
+  (blended for players with the mod, a sparse pattern for the rest). Maps are
+  sent again whole when their territory changes. Posts whose banner is gone are
+  taken down when their chunk is loaded. Claimed (drawn) borders, contested
+  hatching and the political map are left for later.
+- **"Entering …"** is worked out from the nearest post in reach, straight-line,
+  every half second; "Leaving …" when there's none.
+- **Cave maps** are made by using an empty map with at least 8 blocks of rock or
+  soil overhead (leaves don't count); the map is named "Cave Map (Y …)". It shows
+  a floor plan: the block at that level in its darkest shade if solid, else the
+  floor below in a shade by how far it drops. It fills within `caveMapReach`
+  blocks while its holder is within 12 blocks of its level. Locking and zooming
+  keep the level. The Nether maps well this way.
+- **The echo** is the planned amethyst resonance: an amethyst shard (not used
+  up, with a cooldown) rings and fills the map in a circle at once, through
+  rock; an echo shard reaches twice as far.
+- **Spyglass:** zoom is scrolling while scoping (¼ to 2½ times vanilla's view);
+  the map in the other hand shows in the top right corner while scoping. Far
+  view and the spyglass enchantments are left for later.
+- **Foresight** is a data-driven enchantment (helmets, one level, treasure,
+  tradeable, on random loot), so vanilla players can join and carry it. The
+  projection is client-side only, for players with the mod: ink within 40
+  blocks as see-through squares on the ground (fainter for watered ink), labels
+  written flat on the ground, pins and icons as pillars of light. Players with
+  the mod are now sent a map's whole ink and territory for it. The vanilla
+  display-entity fallback and the uninstall datapack are left for later. Cave
+  maps project onto the surface for now.
+
 ## Future versions
 
 ### Territory and nations
