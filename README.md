@@ -75,7 +75,7 @@ Look through a spyglass with a filled map in your other hand: the map fills in w
 ### Nations
 Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post is the nation's: borders in the nation's color with a light tint inside. Land floods out from the posts, up to 48 blocks across open ground but less through forest, snow and mountains, so borders follow the land; neighbors meet where their reach does, rivers and coasts make natural borders, and land your nation surrounds becomes yours. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
 
-**Walking the bounds.** Banners can be worn on the head, as raid captains wear them. Wear your named banner and walk around the land you want: the banner remembers the trail, which shows dashed in its color on the map in your hand. Come back to where you started, or back into your nation's land, and the bounds are closed. Take the banner off and plant it: the post claims the trail and everything it closes in, whatever the terrain, and the town bell rings. Land another nation already holds is never taken. A banner remembers up to 2,048 blocks of walking; renaming it starts over.
+**Walking the bounds** (experimental, off unless `walkingBounds` is set). Banners can be worn on the head, as raid captains wear them. Wear your named banner and walk around the land you want: the banner remembers the trail, which shows dashed in its color on the map in your hand. Come back to where you started, or back into your nation's land, and the bounds are closed. Take the banner off and plant it: the post claims the trail and everything it closes in, whatever the terrain, and the town bell rings. Land another nation already holds is never taken. A banner remembers up to 2,048 blocks of walking; renaming it starts over.
 
 **Maps show the nations they know.** A map doesn't show every nation. Use the map on one of a nation's posts (the vanilla way to mark a banner on a map) or pin its banner at the table, and from then on the map shows that nation's land.
 
@@ -109,8 +109,8 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `postReach` | 48 | How far a border post holds land, in blocks |
 | `nationsOnMaps` | true | Maps show nations' borders and land |
 | `bordersNeedBanners` | true | A map shows a nation only once its banner is marked or pinned on it |
-| `wearableBanners` | true | Banners can be worn on the head |
-| `boundsLength` | 2048 | How far a worn banner remembers the bounds it walks, in blocks (0: off) |
+| `walkingBounds` | false | Experimental: named banners can be worn to walk the bounds of land, and claim it when planted |
+| `boundsLength` | 2048 | How far a worn banner remembers the bounds it walks, in blocks |
 | `nationMessages` | true | Say "Entering …" in the action bar when crossing a border |
 | `framePainting` | true | Maps in item frames can be painted where they hang |
 | `sketching` | true | Books and quills can be sketched in |

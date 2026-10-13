@@ -807,13 +807,24 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** Wearing a named banner walks the bounds of land; planted, it claims them, and the map in hand shows the trail. */
+	/**
+	 * With walking the bounds turned on, wearing a named banner walks the bounds
+	 * of land; planted, it claims them, and the map in hand shows the trail.
+	 */
 	@GameTest
 	public void marchingBannersClaimLand(GameTestHelper helper) {
+		boolean was = MapPlusConfig.get().walkingBounds;
+		MapPlusConfig.get().walkingBounds = true;
+		try {
+			marchAndClaim(helper);
+		} finally {
+			MapPlusConfig.get().walkingBounds = was;
+		}
+	}
+
+	private void marchAndClaim(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		ItemStack banner = new ItemStack(Items.BANNER.pick(DyeColor.LIME));
-		helper.assertValueEqual(banner.get(DataComponents.EQUIPPABLE) == null ? null : banner.get(DataComponents.EQUIPPABLE).slot(),
-				EquipmentSlot.HEAD, Component.literal("a banner is worn on the head"));
 		banner.set(DataComponents.CUSTOM_NAME, Component.literal("Limeland"));
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
 		player.setItemSlot(EquipmentSlot.HEAD, banner);

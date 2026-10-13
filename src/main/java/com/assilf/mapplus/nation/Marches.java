@@ -29,7 +29,8 @@ import java.util.UUID;
  * where the march began, or back in the nation's own land, the bounds are
  * closed; planted, the banner claims the trail and the land it closes in (see
  * {@link Claim#annex}). Runs on the server, so players without the mod can
- * march too.
+ * march too. Experimental, and off unless {@code walkingBounds} is set: then
+ * banners can be worn, marches are followed, and planted banners claim.
  */
 public final class Marches {
 	/** How often marches are followed, in ticks. */
@@ -54,7 +55,7 @@ public final class Marches {
 	public static void register() {
 		// Banners go on the head, as a raid captain's does.
 		DefaultItemComponentEvents.MODIFY.register(context -> context.modify(item -> item instanceof BannerItem, (builder, item) -> {
-			if (MapPlusConfig.get().wearableBanners) {
+			if (MapPlusConfig.get().walkingBounds) {
 				builder.set(DataComponents.EQUIPPABLE, Equippable.builder(EquipmentSlot.HEAD)
 						.setEquipSound(SoundEvents.ARMOR_EQUIP_LEATHER)
 						.setDispensable(false)
@@ -72,6 +73,9 @@ public final class Marches {
 
 	/** The bounds a player's worn banner is walking, or null. */
 	public static Worn worn(Player player) {
+		if (!MapPlusConfig.get().walkingBounds) {
+			return null;
+		}
 		ItemStack head = player.getItemBySlot(EquipmentSlot.HEAD);
 		if (!(head.getItem() instanceof BannerItem banner)) {
 			return null;
@@ -82,7 +86,7 @@ public final class Marches {
 
 	private static void tick(MinecraftServer server) {
 		MapPlusConfig config = MapPlusConfig.get();
-		if (!config.nations || config.boundsLength <= 0 || server.getTickCount() % EVERY != 0) {
+		if (!config.nations || !config.walkingBounds || config.boundsLength <= 0 || server.getTickCount() % EVERY != 0) {
 			return;
 		}
 		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -94,7 +98,7 @@ public final class Marches {
 	public static void step(Player player) {
 		ItemStack head = player.getItemBySlot(EquipmentSlot.HEAD);
 		MinecraftServer server = player.level().getServer();
-		if (head.getItem() instanceof BannerItem && !player.isSpectator() && server != null) {
+		if (head.getItem() instanceof BannerItem && !player.isSpectator() && server != null && MapPlusConfig.get().walkingBounds) {
 			march(player, head, NationData.get(server), MapPlusConfig.get());
 		}
 	}

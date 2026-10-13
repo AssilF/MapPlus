@@ -56,9 +56,12 @@ public final class MapPlusConfig {
 	 * marked by using the map on one of its posts, or pinned at the table.
 	 */
 	public boolean bordersNeedBanners = true;
-	/** Whether banners can be worn on the head, as raid captains wear them. */
-	public boolean wearableBanners = true;
-	/** How far a worn named banner remembers the bounds it walks, in blocks; 0 turns marching off. */
+	/**
+	 * Whether named banners can be worn on the head to walk the bounds of land,
+	 * and claim it when planted. Experimental: off until it's reworked.
+	 */
+	public boolean walkingBounds = false;
+	/** How far a worn named banner remembers the bounds it walks, in blocks. */
 	public int boundsLength = 2048;
 	/** Whether players are told in the action bar when they cross a border. */
 	public boolean nationMessages = true;

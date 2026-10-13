@@ -722,9 +722,12 @@ when you place it, it claims the portion you annexed"; maps shouldn't mark
 turfs by default; and the sketchbook.
 
 **Walking the bounds** (after the old custom of beating the bounds, when a
-parish walked its boundary every year):
-- Banners can be worn on the head, as raid captains wear them
-  (`wearableBanners`): every banner item gets vanilla's `equippable` component
+parish walked its boundary every year). Since turned off by default behind
+`walkingBounds` (which replaced `wearableBanners`), until it's reworked: with
+it off, banners aren't worn, marches aren't followed and planting claims
+nothing; named banners are still posts.
+- Banners can be worn on the head, as raid captains wear them: every banner
+  item gets vanilla's `equippable` component
   for the head, swappable (use it in the air to put it on) but not dispensed
   onto entities, so dispensers still drop banners as before. Players without
   the mod can wear them too; their client just doesn't predict it.

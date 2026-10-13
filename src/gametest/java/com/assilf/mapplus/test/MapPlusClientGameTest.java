@@ -9,7 +9,6 @@ import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
 import com.assilf.mapplus.ink.Mark;
-import com.assilf.mapplus.nation.Bounds;
 import com.assilf.mapplus.nation.NationData;
 import com.assilf.mapplus.nation.Post;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -164,9 +163,8 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				throw new AssertionError("The fill should tint the fenced plot at half strength and nothing outside it");
 			}
 
-			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon, a
-			// nation whose border post stands to the east, marked on the map, and the dashed bounds the banner worn on the
-			// player's head has walked.
+			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon, and a
+			// nation whose border post stands to the east, marked on the map.
 			server.runOnServer(minecraft -> {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 				player.closeContainer();
@@ -175,13 +173,6 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				player.level().setBlockAndUpdate(post, ((BlockItem) Items.BANNER.pick(DyeColor.BLUE)).getBlock().defaultBlockState());
 				NationData.get(minecraft).put(new Post(player.level().dimension(), post, DyeColor.BLUE, List.of(), "Blueland"));
 				player.level().getMapData(explored.get(DataComponents.MAP_ID)).toggleBanner(player.level(), post);
-				ItemStack worn = new ItemStack(Items.BANNER.pick(DyeColor.LIME));
-				worn.set(DataComponents.CUSTOM_NAME, Component.literal("Limeland"));
-				BlockPos at = player.blockPosition();
-				Bounds.start(player.level().dimension(), "Limeland", at.getX() - 30, at.getZ() - 10, false)
-						.to(at.getX() - 6, at.getZ() - 30, 32).to(at.getX() + 10, at.getZ() - 4, 32).to(at.getX() - 10, at.getZ() + 20, 32)
-						.closedAtStart().write(worn);
-				player.setItemSlot(EquipmentSlot.HEAD, worn);
 			});
 			context.waitTicks(25);
 			context.getInput().lookAt(0, 70);

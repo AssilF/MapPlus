@@ -101,7 +101,8 @@ public final class Nations {
 		NationData data = NationData.get(level.getServer());
 		Claim claim = Claim.NONE;
 		Bounds bounds = Bounds.read(stack);
-		if (bounds != null && bounds.dimension().equals(level.dimension()) && bounds.name().equals(text) && bounds.count() > 1) {
+		if (MapPlusConfig.get().walkingBounds && bounds != null && bounds.dimension().equals(level.dimension()) && bounds.name().equals(text)
+				&& bounds.count() > 1) {
 			String design = Post.design(banner.getColor(), layers);
 			List<Post> near = near(data, level.dimension(), bounds);
 			claim = Claim.annex(bounds.points(), (x, z) -> holds(near, design, x, z, true), (x, z) -> holds(near, design, x, z, false));
