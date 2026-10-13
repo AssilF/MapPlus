@@ -60,14 +60,14 @@ The atlas opens in the vanilla book and quill screen. Each stitched map shows on
 Removing the mod leaves the atlas as an ordinary book: notes intact, map pages showing the map's name.
 
 ### Sketchbook
-Any book and quill is a sketchbook. Hold it with ink in your other hand and open it: on an empty page, the book's own quill draws.
+Any book and quill is a sketchbook. Hold it with ink in your other hand and open it: on any page that isn't a map, the book's own quill draws.
 
 - A dye or ink sac draws in its color, a glow ink sac makes the ink glow, a water bottle washes it out. Hold Shift for a light coat; right-click erases.
-- A sketch fills the page's writing area, where text would sit. A page is either text or a sketch.
+- A sketch fills the page's writing area, under the text: draw on an empty page, or around and under what's written. Without ink in your other hand, clicking places the text cursor as usual.
 - Ink is paid for as at the table, from the hand holding it. Free in creative.
 - Sketches show wherever the book does: in hand, signed, on a lectern, and facing a map in an atlas. Up to 16 pages per book.
 
-Players without the mod, and everyone after removal, see an empty page.
+Players without the mod, and everyone after removal, see the page's text alone.
 
 ### Spyglass survey
 Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too. With the mod, the map shows in the top right corner while you look, and scrolling zooms the spyglass in and out.

@@ -5,16 +5,13 @@ import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.atlas.Sketch;
 import com.assilf.mapplus.net.SketchPayload;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.server.network.Filterable;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.WritableBookContent;
 
 import java.util.BitSet;
-import java.util.List;
 
 /**
  * Sketching in a book and quill: with the book in one hand and ink in the
@@ -30,13 +27,9 @@ public final class Sketching {
 		ServerPlayNetworking.registerGlobalReceiver(SketchPayload.TYPE, (payload, context) -> draw(context.player(), payload));
 	}
 
-	/** Whether a page of a book can hold a sketch: it isn't a map's, and has no text. */
+	/** Whether a page of a book can hold a sketch: any page but a map's, written on or not. */
 	public static boolean canSketch(ItemStack book, Atlas atlas, int page) {
-		if (page < 0 || page >= WritableBookContent.MAX_PAGES || atlas.plateAt(page) != null) {
-			return false;
-		}
-		List<Filterable<String>> pages = book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY).pages();
-		return page >= pages.size() || pages.get(page).raw().isBlank();
+		return page >= 0 && page < WritableBookContent.MAX_PAGES && atlas.plateAt(page) == null;
 	}
 
 	public static void draw(Player player, SketchPayload payload) {

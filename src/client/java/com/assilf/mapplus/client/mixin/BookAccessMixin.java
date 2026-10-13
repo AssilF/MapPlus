@@ -1,7 +1,6 @@
 package com.assilf.mapplus.client.mixin;
 
 import com.assilf.mapplus.atlas.Atlas;
-import com.assilf.mapplus.atlas.Sketch;
 import com.assilf.mapplus.client.atlas.AtlasSpread;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.client.gui.screens.inventory.BookViewScreen;
@@ -37,11 +36,6 @@ public abstract class BookAccessMixin {
 		for (Atlas.Plate plate : atlas.plates()) {
 			if (plate.page() >= 0 && plate.page() < pages.size()) {
 				pages.set(plate.page(), Component.empty());
-			}
-		}
-		for (Sketch sketch : atlas.sketches()) {
-			if (sketch.page() < pages.size()) {
-				pages.set(sketch.page(), Component.empty());
 			}
 		}
 		BookViewScreen.BookAccess atlasAccess = new BookViewScreen.BookAccess(pages);

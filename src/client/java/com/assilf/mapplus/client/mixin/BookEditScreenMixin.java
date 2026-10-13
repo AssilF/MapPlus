@@ -33,8 +33,7 @@ import java.util.List;
 /**
  * An atlas in the vanilla book and quill screen: written pages work as usual,
  * and a stitched map shows on the page facing its notes. Any book and quill
- * can be sketched in (see {@link SketchPad}); a sketched page has no room for
- * text.
+ * can be sketched in (see {@link SketchPad}), under the writing.
  */
 @Mixin(BookEditScreen.class)
 public abstract class BookEditScreenMixin extends Screen implements AtlasBookScreen, SketchBookScreen {
@@ -152,17 +151,6 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 	private void mapplus$beforeExtract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if (mapplus$atlas != null) {
 			mapplus$followPage();
-		} else {
-			page.visible = true;
-			page.active = true;
-		}
-		// A sketched page has no room for text.
-		if (mapplus$sketchPad.isSketch(currentPage)) {
-			page.visible = false;
-			page.active = false;
-			if (getFocused() == page) {
-				setFocused(null);
-			}
 		}
 	}
 
@@ -263,11 +251,6 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 	@Override
 	public int mapplus$currentPage() {
 		return currentPage;
-	}
-
-	@Override
-	public boolean mapplus$hasText(int index) {
-		return index >= 0 && index < pages.size() && !pages.get(index).isBlank();
 	}
 
 	@Override

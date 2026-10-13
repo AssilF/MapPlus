@@ -22,10 +22,11 @@ import java.util.Map;
 
 /**
  * Sketching in an open book and quill. With ink in the other hand, the book's
- * own quill draws on an empty page: a dye or ink sac in its color, a glow ink
- * sac makes ink glow, a water bottle washes it out. Shift lays a light coat;
- * the right button erases. Strokes go to the server as each ends, and show at
- * once, until the book comes back with them.
+ * own quill draws on a page, under its writing if it has any: a dye or ink sac
+ * in its color, a glow ink sac makes ink glow, a water bottle washes it out.
+ * Shift lays a light coat; the right button erases. Without ink in hand, a
+ * click places the text cursor as usual. Strokes go to the server as each
+ * ends, and show at once, until the book comes back with them.
  */
 public final class SketchPad {
 	/** A light coat, as Shift gives. */
@@ -82,14 +83,14 @@ public final class SketchPad {
 		return sketch == null ? null : sketch.ink();
 	}
 
-	/** Whether a page shows a sketch, so it has no room for text. */
+	/** Whether a page shows a sketch. */
 	public boolean isSketch(int page) {
 		return sketch(page) != null;
 	}
 
-	/** Whether a page can be drawn on: no map, no text. */
+	/** Whether a page can be drawn on: any page but a map's. */
 	private boolean canSketch(int page) {
-		return !book.mapplus$isMapPage(page) && !book.mapplus$hasText(page);
+		return !book.mapplus$isMapPage(page);
 	}
 
 	/** The point of the writing area under the mouse, or null if it's outside. */

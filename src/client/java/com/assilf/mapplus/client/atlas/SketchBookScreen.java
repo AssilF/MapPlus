@@ -12,9 +12,6 @@ public interface SketchBookScreen {
 	/** The page being shown for editing. */
 	int mapplus$currentPage();
 
-	/** Whether a page has any text on it. */
-	boolean mapplus$hasText(int page);
-
 	/** Whether a page holds a stitched map. */
 	boolean mapplus$isMapPage(int page);
 

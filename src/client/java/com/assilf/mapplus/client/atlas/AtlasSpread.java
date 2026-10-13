@@ -179,9 +179,10 @@ public final class AtlasSpread {
 		byte[] sketch = sketches.apply(layout.facing());
 		if (facingMap != null) {
 			drawMap(graphics, facingMap, facingLeft, top, facingMirrored);
-		} else if (sketch != null) {
-			drawSketch(graphics, sketch, facingLeft, top, facingMirrored);
 		} else {
+			if (sketch != null) {
+				drawSketch(graphics, sketch, facingLeft, top, facingMirrored);
+			}
 			drawText(graphics, text.apply(layout.facing()), facingLeft, top, facingMirrored);
 		}
 	}

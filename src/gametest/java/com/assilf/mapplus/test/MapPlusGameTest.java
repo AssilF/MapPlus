@@ -898,7 +898,7 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** A book and quill's empty pages take sketches, paid for with the ink in the other hand; pages with text don't. */
+	/** A book and quill's pages take sketches, under any writing, paid for with the ink in the other hand. */
 	@GameTest
 	public void sketchesAreDrawnInBooks(GameTestHelper helper) {
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
@@ -918,7 +918,8 @@ public class MapPlusGameTest {
 		helper.assertValueEqual(atlas.requiredPages(), 2, Component.literal("the sketched page is kept"));
 
 		Sketching.draw(player, new SketchPayload(false, 0, Ink.FULL, false, line));
-		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(0) == null, Component.literal("no sketch over text"));
+		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(0) != null, Component.literal("a sketch under the page's notes"));
+		helper.assertValueEqual(pages(player.getMainHandItem()).getFirst(), "Notes", Component.literal("the notes are kept"));
 
 		Sketching.draw(player, new SketchPayload(false, 1, Ink.FULL, true, line));
 		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(1) == null, Component.literal("erased, the page is empty again"));

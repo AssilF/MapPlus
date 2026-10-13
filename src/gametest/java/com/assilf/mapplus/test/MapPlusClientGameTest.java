@@ -372,6 +372,13 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			sketch(context, 62, 90, 62, 110);
 			context.waitTicks(10);
 			context.takeScreenshot("sketch_drawn");
+			// On the written first page, the title underlined: a sketch goes under the writing too.
+			context.getInput().pressKey(InputConstants.KEY_PAGEUP);
+			context.waitTicks(3);
+			sketch(context, 0, 9, 74, 9);
+			sketch(context, 0, 11, 74, 11);
+			context.waitTicks(10);
+			context.takeScreenshot("sketch_under_text");
 			clickDone(context);
 			context.waitTicks(10);
 			int[] kept = server.computeOnServer(minecraft -> {
@@ -417,8 +424,9 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				ItemStack helmet = new ItemStack(Items.LEATHER_HELMET);
 				helmet.enchant(minecraft.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Projection.FORESIGHT), 1);
 				player.setItemSlot(EquipmentSlot.HEAD, helmet);
-				player.setItemInHand(InteractionHand.MAIN_HAND, far);
-				player.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
+				// In the off hand, so the map doesn't hide the ground.
+				player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+				player.setItemInHand(InteractionHand.OFF_HAND, far);
 			});
 			context.waitTicks(20);
 			context.takeScreenshot("foresight_far");

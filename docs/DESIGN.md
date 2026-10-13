@@ -816,6 +816,9 @@ Also this round:
   Foresight lays the map there. It fades out over the last 8 blocks of its
   reach. Players without the mod don't see Foresight at all; that's settled
   rather than planned around.
+- **Sketches under writing.** A sketch can go on any page that isn't a map's,
+  written on or not: it lies under the text, which stays editable. With ink
+  in the other hand a click draws; without, it places the text cursor.
 - **Whole stacks at the rack.** 26.3 numbers the mouse's left button 1, but
   container clicks still count a left click as 0; the rack and palette sent 1,
   a right click, so picking up a stack of string or chain took half of it and
