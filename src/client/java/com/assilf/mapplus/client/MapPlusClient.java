@@ -4,14 +4,19 @@ import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.client.atlas.AtlasBookScreen;
 import com.assilf.mapplus.client.desk.DeskState;
 import com.assilf.mapplus.client.desk.DeskWing;
+import com.assilf.mapplus.client.marks.ClientMarks;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.net.AtlasPagePayload;
+import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
+import com.assilf.mapplus.net.MapMarksPayload;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.CartographyTableScreen;
@@ -34,6 +39,9 @@ public class MapPlusClient implements ClientModInitializer {
 				WINGS.get(table).acknowledge(payload.ack());
 			}
 		});
+		ClientPlayNetworking.registerGlobalReceiver(InkLayerPayload.TYPE, (payload, context) -> DeskState.accept(payload));
+		ClientPlayNetworking.registerGlobalReceiver(MapMarksPayload.TYPE, (payload, context) -> ClientMarks.accept(payload));
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientMarks.clear());
 
 		// The table window widens for the drawing desk before vanilla lays it out.
 		ScreenEvents.BEFORE_INIT.register((client, screen, width, height) -> {
@@ -68,10 +76,18 @@ public class MapPlusClient implements ClientModInitializer {
 		ScreenMouseEvents.allowMouseDrag(table).register((screen, event, dx, dy) -> !desk.mouseDragged(event.x(), event.y(), event.button()));
 		ScreenMouseEvents.allowMouseRelease(table).register((screen, event) -> !desk.mouseReleased(event.x(), event.y(), event.button()));
 		ScreenMouseEvents.allowMouseScroll(table).register((screen, mouseX, mouseY, horizontal, vertical) -> !desk.mouseScrolled(mouseX, mouseY, vertical));
+		ScreenKeyboardEvents.allowKeyPress(table).register((screen, event) -> !desk.keyPressed(event));
+		ScreenKeyboardEvents.allowCharType(table).register((screen, event) -> !desk.charTyped(event));
 		ScreenEvents.remove(table).register(screen -> {
 			desk.close();
 			WINGS.remove(screen);
 		});
+	}
+
+	/** Whether a drawing tool is carried over the desk's map, so it's drawn held by its tip. */
+	public static boolean holdsToolOverMap(Screen screen, double mouseX, double mouseY) {
+		DeskWing wing = WINGS.get(screen);
+		return wing != null && wing.holdsToolOverMap(mouseX, mouseY);
 	}
 
 	/** Sends what's left of a pen stroke before the table window closes. */

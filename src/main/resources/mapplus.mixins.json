@@ -7,6 +7,7 @@
 		"CartographyMapSlotMixin",
 		"CartographyResultSlotMixin",
 		"CartographyTableMenuMixin",
+		"EmptyMapItemMixin",
 		"HoldingPlayerMixin",
 		"MapItemMixin",
 		"MapItemSavedDataAccessor",

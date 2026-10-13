@@ -1,5 +1,6 @@
 package com.assilf.mapplus.ink;
 
+import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.atlas.Atlas;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.player.Player;
@@ -24,8 +25,21 @@ public interface DrawingDesk {
 
 	void mapplus$setCanvas(MapId canvas);
 
+	/** Whether a loom stands next to the table. Only known on the server. */
+	boolean mapplus$hasLoom();
+
 	static DrawingDesk of(CartographyTableMenu menu) {
 		return (DrawingDesk) menu;
+	}
+
+	/** Whether labels, pins and borders can be used at this table: a loom stands next to it. */
+	static boolean mayMark(CartographyTableMenu menu) {
+		return !MapPlusConfig.get().markingNeedsLoom || of(menu).mapplus$hasLoom();
+	}
+
+	/** Whether the tool on the cursor may be used at this table. */
+	static boolean mayUse(CartographyTableMenu menu, InkTool tool) {
+		return tool != null && (!tool.marking() || mayMark(menu));
 	}
 
 	/** The map item for a canvas: a filled map pointing at it. */

@@ -53,16 +53,18 @@ final class InkPreview {
 		}
 	}
 
-	/** Marks pending pixels in a copy of the map's colors with a color no map uses. */
-	void stamp(byte[] mapColors) {
+	/** The pixels of strokes not back from the server yet. */
+	BitSet pending() {
+		BitSet pending = new BitSet(Ink.PIXELS);
 		if (count == 0) {
-			return;
+			return pending;
 		}
 		for (int i = 0; i < Ink.PIXELS; i++) {
 			if (colors[i] != 0) {
-				mapColors[i] = (byte) 0xFF;
+				pending.set(i);
 			}
 		}
+		return pending;
 	}
 
 	void clear() {

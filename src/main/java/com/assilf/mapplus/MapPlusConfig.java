@@ -23,6 +23,17 @@ public final class MapPlusConfig {
 	/** Drawing is free in creative mode. */
 	public boolean creativeInkIsFree = true;
 
+	/** Labels, pins and borders need a loom next to the cartography table. */
+	public boolean markingNeedsLoom = true;
+	/** Labels one map can carry. */
+	public int maxLabelsPerMap = 32;
+	/** Pins one map can carry. */
+	public int maxPinsPerMap = 32;
+	/** Only whoever sealed a map, its maker or an operator can scrape the seal off. */
+	public boolean sealsAreOwned = true;
+	/** Log every label and pin placed, with who placed it. */
+	public boolean logMarks = true;
+
 	/** Whether looking through a spyglass while holding a map fills the map in. */
 	public boolean spyglassSurvey = true;
 	/** Map pixels the spyglass can fill per tick, per player. */
@@ -60,6 +71,8 @@ public final class MapPlusConfig {
 		config.surveyPixelsPerTick = Math.max(0, config.surveyPixelsPerTick);
 		config.surveyRangeMultiplier = Math.max(1.0, config.surveyRangeMultiplier);
 		config.surveyChunksPerTick = Math.max(0, config.surveyChunksPerTick);
+		config.maxLabelsPerMap = Math.max(0, config.maxLabelsPerMap);
+		config.maxPinsPerMap = Math.max(0, config.maxPinsPerMap);
 		instance = config;
 
 		try {

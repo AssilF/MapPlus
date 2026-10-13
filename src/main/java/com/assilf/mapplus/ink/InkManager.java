@@ -3,6 +3,7 @@ package com.assilf.mapplus.ink;
 import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.mixin.MapItemSavedDataAccessor;
+import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.survey.MapPixels;
@@ -50,10 +51,18 @@ public final class InkManager {
 	private InkManager() {
 	}
 
+	/** At most this many strokes and mark edits from one player are applied per tick. */
+	private static final int EDITS_PER_TICK = 4;
+
 	/** What a drawing player has been told so far. */
 	private static final class Session {
 		int ack;
 		InkStatePayload sent;
+		long tick;
+		int edits;
+		/** The map whose ink was last sent, and the version sent. */
+		int layerMap = Integer.MIN_VALUE;
+		int layerVersion;
 	}
 
 	public static void register() {
@@ -68,16 +77,35 @@ public final class InkManager {
 	}
 
 	public static void handleStroke(ServerPlayer player, InkStrokePayload payload) {
-		Session session = session(player);
-		session.ack = Math.max(session.ack, payload.seq());
-		if (player.containerMenu instanceof CartographyTableMenu menu) {
+		if (acknowledge(player, payload.seq()) && player.containerMenu instanceof CartographyTableMenu menu) {
 			draw(player, menu, player.level(), payload);
 		}
+	}
+
+	/**
+	 * Notes a stroke or mark edit as handled, so the client stops showing it as
+	 * pending. Returns false when the player sends more than a few a tick; those
+	 * are dropped.
+	 */
+	static boolean acknowledge(ServerPlayer player, int seq) {
+		Session session = session(player);
+		session.ack = Math.max(session.ack, seq);
+		long now = player.level().getGameTime();
+		if (session.tick != now) {
+			session.tick = now;
+			session.edits = 0;
+		}
+		return ++session.edits <= EDITS_PER_TICK;
 	}
 
 	/** Applies a stroke to the map on a drawing desk, paying for it from the desk's second slot. */
 	public static void draw(Player player, CartographyTableMenu menu, ServerLevel level, InkStrokePayload payload) {
 		if (!DrawingDesk.of(menu).mapplus$isDesk()) {
+			return;
+		}
+		// Only drawn with a tool on the cursor: a feather, brush, string, item frame, bucket or chain.
+		InkTool tool = InkTool.of(menu.getCarried());
+		if (tool == null || !tool.draws() || !DrawingDesk.mayUse(menu, tool)) {
 			return;
 		}
 		Slot materialSlot = menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT);
@@ -123,7 +151,7 @@ public final class InkManager {
 		}
 
 		if (mapId == null) {
-			mapId = createCanvas(level);
+			mapId = createCanvas(level, player);
 			DrawingDesk.of(menu).mapplus$setCanvas(mapId);
 		}
 		if (layer == null) {
@@ -162,10 +190,11 @@ public final class InkManager {
 		}
 	}
 
-	/** A blank map to draw on. Locked, so it never fills in with terrain. */
-	private static MapId createCanvas(ServerLevel level) {
+	/** A blank map to draw on, made by this player. Locked, so it never fills in with terrain. */
+	static MapId createCanvas(ServerLevel level, Player player) {
 		MapId id = level.getFreeMapId();
 		level.setMapData(id, MapItemSavedData.createFresh(0, 0, (byte) 0, false, false, level.dimension()).locked());
+		InkData.get(level.getServer()).setMaker(id, player.getUUID());
 		return id;
 	}
 
@@ -179,18 +208,22 @@ public final class InkManager {
 				Session session = SESSIONS.get(player.getUUID());
 				if (session != null) {
 					session.sent = null;
+					session.layerMap = Integer.MIN_VALUE;
 				}
 				continue;
 			}
 			Session session = session(player);
 			MapId mapId = DrawingDesk.shownMap(menu);
 			boolean sealed = false;
+			boolean scrapable = true;
 			if (mapId != null) {
 				MapItemSavedData map = player.level().getMapData(mapId);
 				if (map != null) {
 					MapViewers.view(player, mapId, map);
 				}
-				sealed = InkData.get(server).isSealed(mapId);
+				InkData data = InkData.get(server);
+				sealed = data.isSealed(mapId);
+				scrapable = data.mayScrape(player, mapId);
 			}
 
 			InkMaterial material = InkMaterial.of(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem());
@@ -202,13 +235,28 @@ public final class InkManager {
 					sealed,
 					material == null ? 0 : material.charge(supply),
 					material == null ? 1 : material.perItem(),
-					isFree(player)
+					isFree(player),
+					DrawingDesk.mayMark(menu),
+					scrapable
 			);
+			sendLayer(player, session, mapId, canvas);
 			// Sent after the map, so the client has the new pixels when it learns the stroke is done.
 			if (!state.equals(session.sent)) {
 				ServerPlayNetworking.send(player, state);
 				session.sent = state;
 			}
+		}
+	}
+
+	/** Sends the ink on the desk's map when the map or its ink changes, for the fill tool. */
+	private static void sendLayer(ServerPlayer player, Session session, MapId mapId, MapId canvas) {
+		int id = mapId != null ? mapId.id() : canvas == null ? InkStrokePayload.NEW_CANVAS : canvas.id();
+		InkLayer layer = mapId == null ? null : InkData.get(player.level().getServer()).find(mapId);
+		int version = layer == null ? 0 : layer.inkVersion();
+		if (session.layerMap != id || session.layerVersion != version) {
+			session.layerMap = id;
+			session.layerVersion = version;
+			ServerPlayNetworking.send(player, new InkLayerPayload(id, layer == null ? new byte[Ink.PIXELS] : layer.pixels().clone()));
 		}
 	}
 
@@ -232,7 +280,7 @@ public final class InkManager {
 	public static boolean wash(MinecraftServer server, MapId mapId) {
 		InkData data = InkData.get(server);
 		InkLayer layer = data.find(mapId);
-		if (layer == null || layer.isSealed() || layer.isEmpty()) {
+		if (layer == null || layer.isSealed() || !layer.hasInk()) {
 			return false;
 		}
 		layer.clear();
@@ -241,6 +289,7 @@ public final class InkManager {
 		MapItemSavedData map = server.overworld().getMapData(mapId);
 		if (map != null) {
 			markDirty(map, 0, 0, Ink.SIZE - 1, Ink.SIZE - 1);
+			marksChanged(map);
 		}
 		return true;
 	}
@@ -252,6 +301,7 @@ public final class InkManager {
 	 */
 	public static void carryInk(ServerLevel level, MapId from, MapId to) {
 		InkData data = InkData.get(level.getServer());
+		data.setMaker(to, data.maker(from));
 		InkLayer source = data.find(from);
 		MapItemSavedData oldMap = level.getMapData(from);
 		MapItemSavedData newMap = level.getMapData(to);
@@ -260,7 +310,16 @@ public final class InkManager {
 		}
 		InkLayer target = data.getOrCreate(to);
 		target.setSealed(source.isSealed());
+		target.setSealer(source.sealer());
 		int oldScale = MapPixels.scaleBlocks(oldMap);
+		for (Mark mark : source.marks()) {
+			int x = MapPixels.pixelX(newMap, MapPixels.worldX(oldMap, mark.x()) + oldScale / 2);
+			int y = MapPixels.pixelZ(newMap, MapPixels.worldZ(oldMap, mark.y()) + oldScale / 2);
+			if (x >= 0 && y >= 0 && x < Ink.SIZE && y < Ink.SIZE) {
+				target.putMark(mark.at(x, y));
+			}
+		}
+		marksChanged(newMap);
 		for (int i = 0; i < Ink.PIXELS; i++) {
 			byte ink = source.get(i);
 			if (!Ink.isPresent(ink)) {
@@ -276,6 +335,11 @@ public final class InkManager {
 		markDirty(newMap, 0, 0, Ink.SIZE - 1, Ink.SIZE - 1);
 	}
 
+	/** Makes every player who sees this map receive its markers again, and with them its labels and pins. */
+	static void marksChanged(MapItemSavedData map) {
+		((MapItemSavedDataAccessor) map).mapplus$setDecorationsDirty();
+	}
+
 	/** Makes every player who sees this map receive these pixels again. */
 	private static void markDirty(MapItemSavedData map, int minX, int minY, int maxX, int maxY) {
 		MapItemSavedDataAccessor accessor = (MapItemSavedDataAccessor) map;
@@ -289,7 +353,7 @@ public final class InkManager {
 	 * ink left in it is kept on the player, so taking the stack out and putting
 	 * it back loses nothing.
 	 */
-	private static final class Wallet {
+	static final class Wallet {
 		private final Player player;
 		private final InkMaterial material;
 		private final Slot source;

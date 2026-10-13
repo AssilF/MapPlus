@@ -9,7 +9,10 @@
 		"BookEditScreenMixin",
 		"BookViewScreenMixin",
 		"CartographyTableScreenMixin",
-		"LecternScreenMixin"
+		"GuiGraphicsExtractorMixin",
+		"LecternScreenMixin",
+		"MapRendererMixin",
+		"MapRenderStateMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

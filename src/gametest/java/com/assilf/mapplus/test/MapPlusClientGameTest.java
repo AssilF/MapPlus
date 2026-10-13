@@ -3,6 +3,7 @@ package com.assilf.mapplus.test;
 import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.InkData;
+import com.assilf.mapplus.ink.InkLayer;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -41,8 +42,14 @@ import java.util.function.Consumer;
 public class MapPlusClientGameTest implements FabricClientGameTest {
 	private static final int CANVAS_X = 179;
 	private static final int CANVAS_Y = 8;
-	private static final int TOOL_X = 178;
-	private static final int TOOL_Y = 141;
+	private static final int RACK_X = 179;
+	private static final int RACK_Y = 141;
+	private static final int FEATHER = 0;
+	private static final int BOX = 3;
+	private static final int BUCKET = 4;
+	private static final int CHAIN = 5;
+	private static final int SIGN = 6;
+	private static final int BANNER = 7;
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
@@ -54,27 +61,58 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			server.runCommand("weather clear");
 
 			ItemStack explored = server.computeOnServer(MapPlusClientGameTest::exploredMap);
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				ItemStack banner = new ItemStack(Items.BLUE_BANNER);
+				banner.set(DataComponents.CUSTOM_NAME, Component.literal("Town Hall"));
+				for (ItemStack tool : List.of(new ItemStack(Items.FEATHER), new ItemStack(Items.ITEM_FRAME), new ItemStack(Items.BUCKET),
+						new ItemStack(Items.IRON_CHAIN), new ItemStack(Items.OAK_SIGN), banner)) {
+					player.getInventory().add(tool);
+				}
+			});
 
-			// The drawing desk with an explored map and red dye.
+			// The drawing desk with an explored map and red dye, and a loom next to it.
 			server.runOnServer(minecraft -> openTable(minecraft, menu -> {
 				menu.getSlot(CartographyTableMenu.MAP_SLOT).set(explored.copy());
-				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 3));
+				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 16));
 			}));
 			context.waitForScreen(CartographyTableScreen.class);
 			context.waitTicks(10);
 			context.takeScreenshot("desk_map");
 
-			// A pen stroke, then a box with a thicker brush.
-			penStroke(context, 20, 20, 100, 60);
-			clickTool(context, 2);
-			scrollCanvas(context, 64, 64, 1);
+			// A feather stroke, then a box drawn with an item frame.
+			clickTool(context, FEATHER);
+			drag(context, 20, 20, 100, 60);
+			clickTool(context, BOX);
 			drag(context, 30, 80, 90, 115);
 			context.waitTicks(10);
 			context.takeScreenshot("desk_drawn");
 
-			hover(context, TOOL_X + 3 * 16 + 8, TOOL_Y + 9);
+			hover(context, RACK_X + CHAIN * 16 + 8, RACK_Y + 9);
 			context.waitTicks(2);
 			context.takeScreenshot("desk_tool_tooltip");
+
+			// Marking up: a dashed border, the box filled, a label typed with a sign and a banner pinned.
+			clickTool(context, CHAIN);
+			drag(context, 10, 125, 118, 125);
+			clickTool(context, BUCKET);
+			clickCanvas(context, 60, 100);
+			clickTool(context, SIGN);
+			clickCanvas(context, 60, 30);
+			context.getInput().typeChars("Base Camp");
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			clickTool(context, BANNER);
+			clickCanvas(context, 100, 98);
+			context.waitTicks(20);
+			context.takeScreenshot("desk_marks");
+			MapId exploredId = explored.get(DataComponents.MAP_ID);
+			int marks = server.computeOnServer(minecraft -> {
+				InkLayer layer = InkData.get(minecraft).find(exploredId);
+				return layer == null ? 0 : layer.marks().size();
+			});
+			if (marks != 2) {
+				throw new AssertionError("Expected a label and a pin on the map, found " + marks + " marks");
+			}
 
 			// An empty map is a blank canvas; the drawing is the result.
 			server.runOnServer(minecraft -> withTable(minecraft, menu -> {
@@ -82,9 +120,9 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.INK_SAC, 2));
 			}));
 			context.waitTicks(5);
-			clickTool(context, 0);
-			penStroke(context, 10, 64, 118, 64);
-			penStroke(context, 64, 10, 64, 118);
+			clickTool(context, FEATHER);
+			drag(context, 10, 64, 118, 64);
+			drag(context, 64, 10, 64, 118);
 			context.waitTicks(10);
 			context.takeScreenshot("desk_canvas");
 			boolean canvasResult = context.computeOnClient(client -> client.gui.screen() instanceof CartographyTableScreen table
@@ -176,6 +214,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 		ServerLevel level = player.level();
 		BlockPos pos = player.blockPosition().east(2);
 		level.setBlockAndUpdate(pos, Blocks.CARTOGRAPHY_TABLE.defaultBlockState());
+		level.setBlockAndUpdate(pos.north(), Blocks.LOOM.defaultBlockState());
 		player.openMenu(level.getBlockState(pos).getMenuProvider(level, pos));
 		withTable(minecraft, setup);
 	}
@@ -211,20 +250,17 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 		context.waitTick();
 	}
 
+	/** Picks a tool up from the inventory with the rack under the map. */
 	private static void clickTool(ClientGameTestContext context, int index) {
-		hover(context, TOOL_X + index * 16 + 8, TOOL_Y + 9);
+		hover(context, RACK_X + index * 16 + 8, RACK_Y + 9);
 		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
-		context.waitTick();
+		context.waitTicks(2);
 	}
 
-	private static void scrollCanvas(ClientGameTestContext context, int x, int y, double amount) {
+	private static void clickCanvas(ClientGameTestContext context, int x, int y) {
 		hover(context, CANVAS_X + x, CANVAS_Y + y);
-		context.getInput().scroll(amount);
-		context.waitTick();
-	}
-
-	private static void penStroke(ClientGameTestContext context, int x0, int y0, int x1, int y1) {
-		drag(context, x0, y0, x1, y1);
+		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(2);
 	}
 
 	/** Presses on the canvas at one pixel and releases at another, moving in steps. */

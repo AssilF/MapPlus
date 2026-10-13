@@ -14,6 +14,9 @@ public interface MapItemSavedDataAccessor {
 	@Invoker("setColorsDirty")
 	void mapplus$setColorsDirty(int x, int z);
 
+	@Invoker("setDecorationsDirty")
+	void mapplus$setDecorationsDirty();
+
 	@Invoker("removeDecoration")
 	void mapplus$removeDecoration(String id);
 

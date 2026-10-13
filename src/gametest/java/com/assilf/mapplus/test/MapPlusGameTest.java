@@ -7,8 +7,12 @@ import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
 import com.assilf.mapplus.ink.InkManager;
+import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.ink.InkSupply;
+import com.assilf.mapplus.ink.Mark;
+import com.assilf.mapplus.ink.MarkManager;
 import com.assilf.mapplus.net.InkStrokePayload;
+import com.assilf.mapplus.net.MarkEditPayload;
 import com.assilf.mapplus.survey.MapPixels;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -143,6 +147,8 @@ public class MapPlusGameTest {
 				ContainerLevelAccess.create(helper.getLevel(), helper.absolutePos(BlockPos.ZERO)));
 		DrawingDesk.of(menu).mapplus$setDesk(true);
 		player.containerMenu = menu;
+		// Drawing is done with a tool on the cursor.
+		menu.setCarried(new ItemStack(Items.FEATHER));
 		return menu;
 	}
 
@@ -316,6 +322,7 @@ public class MapPlusGameTest {
 		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
 		InkData data = InkData.get(level.getServer());
 		data.getOrCreate(mapId).set(40 + 50 * Ink.SIZE, Ink.encode(DyeColor.ORANGE, false));
+		data.getOrCreate(mapId).putMark(new Mark(1, Mark.Kind.LABEL, 40, 50, DyeColor.ORANGE, "Mill", Mark.MEDIUM, Optional.empty()));
 		data.setSealed(mapId, true);
 
 		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
@@ -325,6 +332,132 @@ public class MapPlusGameTest {
 		helper.assertTrue(lockedId != null && !lockedId.equals(mapId), Component.literal("locking makes a new map"));
 		helper.assertValueEqual(data.find(lockedId).get(40 + 50 * Ink.SIZE), Ink.encode(DyeColor.ORANGE, false), Component.literal("ink on the locked map"));
 		helper.assertTrue(data.isSealed(lockedId), Component.literal("seal on the locked map"));
+		helper.assertValueEqual(data.find(lockedId).marks().size(), 1, Component.literal("label on the locked map"));
+		helper.succeed();
+	}
+
+	/** Strokes need a drawing tool on the cursor; the iron chain's borders also need a loom next to the table. */
+	@GameTest
+	public void drawingNeedsATool(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.INK_SAC, 4));
+
+		menu.setCarried(ItemStack.EMPTY);
+		InkManager.draw(player, menu, level, new InkStrokePayload(1, mapId.id(), false, pixels(1)));
+		helper.assertTrue(data.find(mapId) == null || !Ink.isPresent(data.find(mapId).get(1)), Component.literal("nothing drawn without a tool"));
+
+		menu.setCarried(new ItemStack(Items.IRON_CHAIN));
+		InkManager.draw(player, menu, level, new InkStrokePayload(2, mapId.id(), true, pixels(2)));
+		helper.assertTrue(data.find(mapId) == null || !Ink.isPresent(data.find(mapId).get(2)), Component.literal("no border without a loom"));
+
+		helper.setBlock(new BlockPos(1, 0, 0), Blocks.LOOM);
+		InkManager.draw(player, menu, level, new InkStrokePayload(3, mapId.id(), true, pixels(3)));
+		helper.assertTrue(Ink.isPresent(data.find(mapId).get(3)), Component.literal("border with a loom next to the table"));
+		helper.succeed();
+	}
+
+	/**
+	 * Labels are written with a sign, in the second slot's dye, and cost ink for
+	 * their letters; pins take a banner's color and name. Players without the
+	 * mod see both as named banner markers.
+	 */
+	@GameTest
+	public void labelsAndPins(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 1));
+		menu.setCarried(new ItemStack(Items.OAK_SIGN));
+
+		MarkEditPayload write = new MarkEditPayload(1, mapId.id(), MarkEditPayload.Action.WRITE, -1, 30, 40, Mark.MEDIUM, "Base \u00a7ccamp");
+		helper.assertFalse(MarkManager.edit(player, menu, level, write), Component.literal("no labels without a loom"));
+		helper.setBlock(new BlockPos(0, 0, 1), Blocks.LOOM);
+		helper.assertTrue(MarkManager.edit(player, menu, level, write), Component.literal("label written"));
+		Mark label = data.find(mapId).marks().getFirst();
+		helper.assertTrue(label.isLabel() && label.color() == DyeColor.RED && !label.text().contains("\u00a7"), Component.literal("a red label, without formatting codes"));
+		InkMaterial red = new InkMaterial(InkMaterial.Kind.DYE, DyeColor.RED);
+		int afterWriting = red.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY));
+		helper.assertValueEqual(afterWriting, red.perItem() - Mark.cost(label.text(), Mark.MEDIUM), Component.literal("ink left after writing"));
+
+		MarkEditPayload rewrite = new MarkEditPayload(2, mapId.id(), MarkEditPayload.Action.REWRITE, label.id(), 0, 0, Mark.MEDIUM, label.text() + " north");
+		helper.assertTrue(MarkManager.edit(player, menu, level, rewrite), Component.literal("label rewritten"));
+		int afterRewriting = red.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY));
+		helper.assertValueEqual(afterWriting - afterRewriting, Mark.cost("north", Mark.MEDIUM), Component.literal("rewriting pays only for the added letters"));
+
+		ItemStack banner = new ItemStack(Items.BLUE_BANNER);
+		banner.set(DataComponents.CUSTOM_NAME, Component.literal("Town hall"));
+		menu.setCarried(banner);
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(3, mapId.id(), MarkEditPayload.Action.PIN, -1, 64, 64, 0, "")),
+				Component.literal("banner pinned"));
+		Mark pin = data.find(mapId).marks().get(1);
+		helper.assertTrue(!pin.isLabel() && pin.color() == DyeColor.BLUE && pin.text().equals("Town hall"), Component.literal("a blue pin named after its banner"));
+
+		MapItemSavedData map = level.getMapData(mapId);
+		Player vanilla = helper.makeMockPlayer(GameType.SURVIVAL);
+		map.getHoldingPlayer(vanilla);
+		Packet<?> packet = map.getUpdatePacket(mapId, vanilla);
+		List<String> names = packet instanceof ClientboundMapItemDataPacket mapPacket
+				? mapPacket.decorations().orElse(List.of()).stream().flatMap(decoration -> decoration.name().stream()).map(Component::getString).toList()
+				: List.of();
+		helper.assertTrue(names.contains("Town hall") && names.contains(label.text() + " north"), Component.literal("pins and labels as named banner markers, got " + names));
+
+		helper.assertFalse(MarkManager.edit(player, menu, level, new MarkEditPayload(4, mapId.id(), MarkEditPayload.Action.MOVE, label.id(), 10, 10, 0, "")),
+				Component.literal("a label isn't moved with a banner"));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(5, mapId.id(), MarkEditPayload.Action.MOVE, pin.id(), 10, 12, 0, "")),
+				Component.literal("pin moved"));
+		helper.assertValueEqual(data.find(mapId).findMark(pin.id()).y(), 12, Component.literal("pin's new spot"));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(6, mapId.id(), MarkEditPayload.Action.REMOVE, pin.id(), 0, 0, 0, "")),
+				Component.literal("pin removed"));
+		helper.assertValueEqual(data.find(mapId).marks().size(), 1, Component.literal("only the label left"));
+
+		data.seal(mapId, player.getUUID());
+		menu.setCarried(new ItemStack(Items.OAK_SIGN));
+		helper.assertFalse(MarkManager.edit(player, menu, level, new MarkEditPayload(7, mapId.id(), MarkEditPayload.Action.WRITE, -1, 5, 5, 0, "Nope")),
+				Component.literal("no labels on a sealed map"));
+		helper.succeed();
+	}
+
+	/** A seal belongs to whoever sealed the map and to the map's maker; anyone else's axe can't scrape it off. */
+	@GameTest
+	public void sealsBelongToTheirOwners(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player maker = helper.makeMockPlayer(GameType.SURVIVAL);
+		Player sealer = helper.makeMockPlayer(GameType.SURVIVAL);
+		Player stranger = helper.makeMockPlayer(GameType.SURVIVAL);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		data.setMaker(mapId, maker.getUUID());
+		data.seal(mapId, sealer.getUUID());
+
+		helper.assertTrue(data.mayScrape(sealer, mapId), Component.literal("the sealer may scrape it"));
+		helper.assertTrue(data.mayScrape(maker, mapId), Component.literal("the maker may scrape it"));
+		helper.assertFalse(data.mayScrape(stranger, mapId), Component.literal("a stranger may not"));
+
+		CartographyTableMenu menu = desk(helper, stranger);
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.IRON_AXE));
+		helper.assertTrue(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().isEmpty(), Component.literal("no result for a stranger's axe"));
+		helper.succeed();
+	}
+
+	/** Washing takes ink and labels off a map; pins are banners, not ink, and stay. */
+	@GameTest
+	public void washingKeepsPins(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkLayer layer = InkData.get(level.getServer()).getOrCreate(mapId);
+		layer.putMark(new Mark(1, Mark.Kind.LABEL, 10, 10, DyeColor.BLACK, "Farm", Mark.MEDIUM, Optional.empty()));
+		layer.putMark(new Mark(2, Mark.Kind.PIN, 20, 20, DyeColor.RED, "", Mark.MEDIUM, Optional.empty()));
+		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("a label washes off"));
+		helper.assertTrue(layer.marks().size() == 1 && !layer.marks().getFirst().isLabel(), Component.literal("the pin stays"));
 		helper.succeed();
 	}
 

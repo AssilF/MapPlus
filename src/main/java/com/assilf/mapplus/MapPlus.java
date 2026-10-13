@@ -5,15 +5,20 @@ import com.assilf.mapplus.ink.CauldronWashing;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkSupply;
 import com.assilf.mapplus.ink.MapViewers;
+import com.assilf.mapplus.ink.MarkManager;
 import com.assilf.mapplus.net.AtlasPagePayload;
+import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
+import com.assilf.mapplus.net.MapMarksPayload;
+import com.assilf.mapplus.net.MarkEditPayload;
 import com.assilf.mapplus.survey.SpyglassSurvey;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.entity.player.Player;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,9 +39,13 @@ public class MapPlus implements ModInitializer {
 
 		PayloadTypeRegistry.serverboundPlay().register(InkStrokePayload.TYPE, InkStrokePayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(AtlasPagePayload.TYPE, AtlasPagePayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(MarkEditPayload.TYPE, MarkEditPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(MapMarksPayload.TYPE, MapMarksPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(InkLayerPayload.TYPE, InkLayerPayload.CODEC);
 
 		InkManager.register();
+		MarkManager.register();
 		MapViewers.register();
 		CauldronWashing.register();
 		SpyglassSurvey.register();
@@ -52,6 +61,11 @@ public class MapPlus implements ModInitializer {
 			return serverPlayer.connection != null && ServerPlayNetworking.canSend(serverPlayer, InkStatePayload.TYPE);
 		}
 		return player.level().isClientSide() && serverHasMod.getAsBoolean();
+	}
+
+	/** Whether a player may use operator commands. */
+	public static boolean isOperator(Player player) {
+		return player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
 	}
 
 	public static Identifier id(String path) {

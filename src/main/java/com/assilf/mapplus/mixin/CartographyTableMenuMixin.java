@@ -23,6 +23,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -94,6 +95,20 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	}
 
 	@Override
+	public boolean mapplus$hasLoom() {
+		return access.evaluate((level, pos) -> {
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					if ((dx != 0 || dz != 0) && level.getBlockState(pos.offset(dx, 0, dz)).is(Blocks.LOOM)) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}, false);
+	}
+
+	@Override
 	public MapId mapplus$canvas() {
 		return mapplus$canvas;
 	}
@@ -162,7 +177,7 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 			return;
 		}
 		access.execute((level, pos) -> {
-			ItemStack out = book ? Atlas.stitch(additional, map, level.registryAccess()) : sealResult(level, map, additional);
+			ItemStack out = book ? Atlas.stitch(additional, map, level.registryAccess()) : mapplus$sealResult(level, map, additional);
 			if (!ItemStack.matches(out, result)) {
 				resultContainer.setItem(CartographyTableMenu.RESULT_SLOT, out);
 				broadcastChanges();
@@ -170,15 +185,22 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 		});
 	}
 
-	/** Honeycomb seals a map's ink and an axe scrapes the seal off; the result is the same map. */
+	/**
+	 * Honeycomb seals a map's ink and an axe scrapes the seal off; the result is
+	 * the same map. Only those allowed to may scrape a seal off.
+	 */
 	@Unique
-	private static ItemStack sealResult(Level level, ItemStack map, ItemStack tool) {
+	private ItemStack mapplus$sealResult(Level level, ItemStack map, ItemStack tool) {
 		MapId mapId = map.get(DataComponents.MAP_ID);
 		if (mapId == null || !map.is(Items.FILLED_MAP) || level.getServer() == null) {
 			return ItemStack.EMPTY;
 		}
-		boolean sealed = InkData.get(level.getServer()).isSealed(mapId);
+		InkData data = InkData.get(level.getServer());
+		boolean sealed = data.isSealed(mapId);
 		boolean sealing = tool.is(Items.HONEYCOMB);
+		if (sealed && !sealing && mapplus$player != null && !data.mayScrape(mapplus$player, mapId)) {
+			return ItemStack.EMPTY;
+		}
 		return sealed != sealing ? map.copyWithCount(1) : ItemStack.EMPTY;
 	}
 

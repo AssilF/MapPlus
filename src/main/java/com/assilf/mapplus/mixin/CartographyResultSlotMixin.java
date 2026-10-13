@@ -59,7 +59,11 @@ public abstract class CartographyResultSlotMixin {
 		}
 		if (additional.is(ItemTags.AXES)) {
 			if (player.level() instanceof ServerLevel level) {
-				InkData.get(level.getServer()).setSealed(mapId, false);
+				InkData data = InkData.get(level.getServer());
+				// Checked when the result was shown; the map comes out either way, so nothing is lost or copied.
+				if (data.mayScrape(player, mapId)) {
+					data.setSealed(mapId, false);
+				}
 				additional.hurtAndBreak(1, level, player instanceof ServerPlayer serverPlayer ? serverPlayer : null, item -> {
 				});
 			}
@@ -70,7 +74,7 @@ public abstract class CartographyResultSlotMixin {
 			ci.cancel();
 		} else if (additional.is(Items.HONEYCOMB)) {
 			if (player.level() instanceof ServerLevel level) {
-				InkData.get(level.getServer()).setSealed(mapId, true);
+				InkData.get(level.getServer()).seal(mapId, player.getUUID());
 			}
 			mapplus$playSound(player, SoundEvents.HONEYCOMB_WAX_ON);
 		}
