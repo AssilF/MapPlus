@@ -320,6 +320,20 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.waitTicks(3);
 			// A tower: its walls, its roof, and a door.
 			sketch(context, 40, 110, 40, 40);
+			context.waitTicks(5);
+			String afterInput = sketchState(context, server);
+			boolean direct = context.computeOnClient(client -> {
+				SketchBookScreen book = (SketchBookScreen) client.gui.screen();
+				double x = book.mapplus$writingX() + 20.5;
+				double y = book.mapplus$writingY() + 20.5;
+				boolean down = book.mapplus$sketchPad().mouseClicked(x, y, 0);
+				book.mapplus$sketchPad().mouseDragged(x + 10, y, 0);
+				book.mapplus$sketchPad().mouseReleased(x + 10, y, 0);
+				return down;
+			});
+			context.waitTicks(5);
+			System.out.println("MAPPLUS-DEBUG after input: " + afterInput + "; direct press taken: " + direct + "; after direct: "
+					+ sketchState(context, server));
 			sketch(context, 40, 40, 74, 40);
 			sketch(context, 74, 40, 74, 110);
 			sketch(context, 34, 40, 57, 12);
@@ -329,7 +343,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			sketch(context, 62, 90, 62, 110);
 			context.waitTicks(10);
 			context.takeScreenshot("sketch_drawn");
-			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			clickDone(context);
 			context.waitTicks(10);
 			int[] kept = server.computeOnServer(minecraft -> {
 				ItemStack book = minecraft.getPlayerList().getPlayers().getFirst().getMainHandItem();
@@ -350,6 +364,42 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(2);
 		}
+	}
+
+	/** What the open book's sketching shows and what the server has, for working out why a sketch went missing. */
+	private static String sketchState(ClientGameTestContext context, TestServerContext server) {
+		String client = context.computeOnClient(minecraft -> {
+			if (!(minecraft.gui.screen() instanceof SketchBookScreen book)) {
+				return "no book open";
+			}
+			return "page " + book.mapplus$currentPage() + ", sketch shown " + book.mapplus$sketchPad().isSketch(1) + ", writing at "
+					+ book.mapplus$writingX() + "," + book.mapplus$writingY() + ", can send "
+					+ net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(com.assilf.mapplus.net.SketchPayload.TYPE);
+		});
+		String held = server.computeOnServer(minecraft -> {
+			ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+			ItemStack book = player.getMainHandItem();
+			return book.getItem() + " with " + Atlas.read(book).map(atlas -> atlas.sketches().size() + " sketches").orElse("no atlas data")
+					+ ", other hand " + player.getOffhandItem();
+		});
+		return client + " | server: " + held;
+	}
+
+	/** Presses the open book's Done button, which saves it. */
+	private static void clickDone(ClientGameTestContext context) {
+		double[] at = context.computeOnClient(client -> {
+			for (var child : client.gui.screen().children()) {
+				if (child instanceof net.minecraft.client.gui.components.Button button
+						&& button.getMessage().getString().equals(net.minecraft.network.chat.CommonComponents.GUI_DONE.getString())) {
+					double scale = scale(client);
+					return new double[] {(button.getX() + button.getWidth() / 2.0) * scale, (button.getY() + button.getHeight() / 2.0) * scale};
+				}
+			}
+			throw new AssertionError("The book should have a Done button");
+		});
+		context.getInput().setCursorPos(at[0], at[1]);
+		context.waitTick();
+		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
 	}
 
 	/** Draws a line with the quill on the open book's page, from one point of its writing area to another. */
