@@ -11,6 +11,7 @@ import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MapMarksPayload;
+import com.assilf.mapplus.net.MapTintsPayload;
 import com.assilf.mapplus.net.MarkEditPayload;
 import com.assilf.mapplus.survey.SpyglassSurvey;
 import net.fabricmc.api.ModInitializer;
@@ -43,6 +44,7 @@ public class MapPlus implements ModInitializer {
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(MapMarksPayload.TYPE, MapMarksPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkLayerPayload.TYPE, InkLayerPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(MapTintsPayload.TYPE, MapTintsPayload.CODEC);
 
 		InkManager.register();
 		MarkManager.register();

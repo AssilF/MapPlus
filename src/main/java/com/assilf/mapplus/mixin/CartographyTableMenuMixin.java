@@ -134,7 +134,7 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	@Inject(method = "removed", at = @At("HEAD"))
 	private void mapplus$keepDrawing(Player player, CallbackInfo ci) {
 		if (!mapplus$desk || mapplus$canvas == null || !(player instanceof ServerPlayer serverPlayer)
-				|| !container.getItem(CartographyTableMenu.MAP_SLOT).is(Items.MAP)) {
+				|| !DrawingDesk.isBlankCanvas(container.getItem(CartographyTableMenu.MAP_SLOT))) {
 			return;
 		}
 		ItemStack drawing = DrawingDesk.canvasItem(mapplus$canvas);
@@ -151,7 +151,7 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	/** With an empty map in the first slot, the result is the drawing on it, whatever the second slot holds. */
 	@Inject(method = "slotsChanged", at = @At("HEAD"), cancellable = true)
 	private void mapplus$showCanvas(Container changed, CallbackInfo ci) {
-		if (!mapplus$desk || !container.getItem(CartographyTableMenu.MAP_SLOT).is(Items.MAP)) {
+		if (!mapplus$desk || !DrawingDesk.isBlankCanvas(container.getItem(CartographyTableMenu.MAP_SLOT))) {
 			return;
 		}
 		ci.cancel();

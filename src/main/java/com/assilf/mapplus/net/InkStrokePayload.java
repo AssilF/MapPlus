@@ -17,11 +17,12 @@ import java.util.BitSet;
  * @param seq    numbers the strokes; the server acknowledges each in {@link InkStatePayload}
  * @param mapId  the map the client is drawing on, or {@link #NEW_CANVAS} for an
  *               empty map that has no drawing yet
- * @param shape  whether the stroke must be drawn whole or not at all (lines,
- *               boxes, fills); pen strokes are drawn until the ink runs out
+ * @param shape    whether the stroke must be drawn whole or not at all (lines,
+ *                 boxes, fills); pen strokes are drawn until the ink runs out
+ * @param strength how watered down the ink is, {@link Ink#FULL} to {@link Ink#FAINTEST}
  * @param pixels the pixels to apply the material to, row by row
  */
-public record InkStrokePayload(int seq, int mapId, boolean shape, BitSet pixels) implements CustomPacketPayload {
+public record InkStrokePayload(int seq, int mapId, boolean shape, int strength, BitSet pixels) implements CustomPacketPayload {
 	public static final int NEW_CANVAS = -1;
 	private static final int MASK_BYTES = Ink.PIXELS / 8;
 
@@ -31,10 +32,16 @@ public record InkStrokePayload(int seq, int mapId, boolean shape, BitSet pixels)
 			InkStrokePayload::read
 	);
 
+	/** A stroke at full strength. */
+	public InkStrokePayload(int seq, int mapId, boolean shape, BitSet pixels) {
+		this(seq, mapId, shape, Ink.FULL, pixels);
+	}
+
 	private static InkStrokePayload read(FriendlyByteBuf buf) {
 		int seq = buf.readVarInt();
 		int mapId = buf.readVarInt();
 		boolean shape = buf.readBoolean();
+		int strength = Ink.clampStrength(buf.readUnsignedByte());
 		BitSet pixels;
 		if (buf.readBoolean()) {
 			byte[] mask = new byte[MASK_BYTES];
@@ -50,7 +57,7 @@ public record InkStrokePayload(int seq, int mapId, boolean shape, BitSet pixels)
 				pixels.set(buf.readUnsignedShort() % Ink.PIXELS);
 			}
 		}
-		return new InkStrokePayload(seq, mapId, shape, pixels);
+		return new InkStrokePayload(seq, mapId, shape, strength, pixels);
 	}
 
 	// Small strokes go as a list of pixels, large ones as a bit per pixel.
@@ -58,6 +65,7 @@ public record InkStrokePayload(int seq, int mapId, boolean shape, BitSet pixels)
 		buf.writeVarInt(seq);
 		buf.writeVarInt(mapId);
 		buf.writeBoolean(shape);
+		buf.writeByte(strength);
 		BitSet clipped = pixels.get(0, Ink.PIXELS);
 		int count = clipped.cardinality();
 		boolean mask = count * 2 >= MASK_BYTES;

@@ -24,6 +24,6 @@ public abstract class CartographyMapSlotMixin implements DeskSlot {
 
 	@ModifyReturnValue(method = "mayPlace", at = @At("RETURN"))
 	private boolean mapplus$acceptCanvas(boolean original, ItemStack stack) {
-		return original || (mapplus$desk != null && mapplus$desk.mapplus$isDesk() && stack.is(Items.MAP));
+		return original || (mapplus$desk != null && mapplus$desk.mapplus$isDesk() && DrawingDesk.isBlankCanvas(stack));
 	}
 }

@@ -12,10 +12,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Labels and pins as vanilla map markers. A pin is a banner marker, exactly as
- * vanilla shows a banner in the world, named after the banner. Players without
- * the mod also see each label as a banner marker in its ink, named with its
- * text, the only way vanilla shows text on a map.
+ * Marks as vanilla map markers, for players without the mod. A pin is a banner
+ * marker, exactly as vanilla shows a banner in the world, named after the
+ * banner. A label or icon is a banner marker in its ink, named with its text,
+ * the only way vanilla shows text on a map.
  */
 public final class MarkDecorations {
 	/** Banner markers point down, as vanilla's do. */
@@ -24,13 +24,10 @@ public final class MarkDecorations {
 	private MarkDecorations() {
 	}
 
-	/** A map's markers with its pins added, and its labels too if the player can't show them as text. */
-	public static List<MapDecoration> withMarks(List<MapDecoration> decorations, List<Mark> marks, boolean labelsAsBanners) {
+	/** A map's markers with its marks added. */
+	public static List<MapDecoration> withMarks(List<MapDecoration> decorations, List<Mark> marks) {
 		List<MapDecoration> out = new ArrayList<>(decorations);
 		for (Mark mark : marks) {
-			if (mark.isLabel() && !labelsAsBanners) {
-				continue;
-			}
 			Optional<Component> name = mark.text().isEmpty() ? Optional.empty() : Optional.of(Component.literal(mark.text()));
 			out.add(new MapDecoration(banner(mark.color()), coordinate(mark.x()), coordinate(mark.y()), BANNER_ROTATION, name));
 		}

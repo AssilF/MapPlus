@@ -42,6 +42,11 @@ public interface DrawingDesk {
 		return tool != null && (!tool.marking() || mayMark(menu));
 	}
 
+	/** Whether an item is a blank canvas in the first slot: an empty map, or a sheet of paper. */
+	static boolean isBlankCanvas(ItemStack stack) {
+		return stack.is(Items.MAP) || stack.is(Items.PAPER);
+	}
+
 	/** The map item for a canvas: a filled map pointing at it. */
 	static ItemStack canvasItem(MapId canvas) {
 		ItemStack stack = new ItemStack(Items.FILLED_MAP);
@@ -49,13 +54,13 @@ public interface DrawingDesk {
 		return stack;
 	}
 
-	/** The map shown on a table's canvas: the map in the first slot, or the drawing on an empty map. */
+	/** The map shown on a table's canvas: the map in the first slot, or the drawing on a blank canvas. */
 	static MapId shownMap(CartographyTableMenu menu) {
 		ItemStack input = menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem();
 		if (input.is(Items.FILLED_MAP)) {
 			return input.get(DataComponents.MAP_ID);
 		}
-		if (input.is(Items.MAP)) {
+		if (isBlankCanvas(input)) {
 			return of(menu).mapplus$canvas();
 		}
 		return null;

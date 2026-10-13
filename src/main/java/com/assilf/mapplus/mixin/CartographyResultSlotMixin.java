@@ -43,7 +43,7 @@ public abstract class CartographyResultSlotMixin {
 		ItemStack additional = additionalSlot.getItem();
 		Slot self = (Slot) (Object) this;
 
-		if (input.is(Items.MAP)) {
+		if (DrawingDesk.isBlankCanvas(input)) {
 			// Forget the canvas first, so the result doesn't come back when the map is used up.
 			DrawingDesk.of(menu).mapplus$setCanvas(null);
 			mapSlot.remove(1);

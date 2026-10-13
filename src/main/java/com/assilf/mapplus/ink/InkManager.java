@@ -151,7 +151,7 @@ public final class InkManager {
 			if (mapId == null || mapId.id() != payload.mapId()) {
 				return;
 			}
-		} else if (input.is(Items.MAP)) {
+		} else if (DrawingDesk.isBlankCanvas(input)) {
 			mapId = DrawingDesk.of(menu).mapplus$canvas();
 			if (mapId == null ? payload.mapId() != InkStrokePayload.NEW_CANVAS : payload.mapId() != mapId.id() && payload.mapId() != InkStrokePayload.NEW_CANVAS) {
 				return;
@@ -167,15 +167,17 @@ public final class InkManager {
 		}
 
 		BitSet pixels = payload.pixels();
-		int cost = 0;
+		int strength = payload.strength();
+		int quarters = material.quarters(strength);
+		int changed = 0;
 		for (int i = pixels.nextSetBit(0); i >= 0 && i < Ink.PIXELS; i = pixels.nextSetBit(i + 1)) {
 			byte ink = layer == null ? Ink.NONE : layer.get(i);
-			if (material.apply(ink) != ink) {
-				cost++;
+			if (material.apply(ink, strength) != ink) {
+				changed++;
 			}
 		}
 		Wallet wallet = new Wallet(player, material, materialSlot);
-		if (cost == 0 || !wallet.canAfford(payload.shape() ? cost : 1)) {
+		if (changed == 0 || !wallet.canAfford(payload.shape() ? (changed * quarters + 3) / 4 : 1)) {
 			return;
 		}
 
@@ -191,15 +193,21 @@ public final class InkManager {
 		int minY = Ink.SIZE;
 		int maxX = -1;
 		int maxY = -1;
+		// Paid a pixel's worth at a time; watered down dye pays a quarter of one per pixel.
+		int credit = 0;
 		for (int i = pixels.nextSetBit(0); i >= 0 && i < Ink.PIXELS; i = pixels.nextSetBit(i + 1)) {
 			byte ink = layer.get(i);
-			byte next = material.apply(ink);
+			byte next = material.apply(ink, strength);
 			if (next == ink) {
 				continue;
 			}
-			if (!wallet.spend()) {
-				break;
+			if (credit < quarters) {
+				if (!wallet.spend()) {
+					break;
+				}
+				credit += 4;
 			}
+			credit -= quarters;
 			layer.set(i, next);
 			int x = i % Ink.SIZE;
 			int y = i / Ink.SIZE;
@@ -311,9 +319,10 @@ public final class InkManager {
 	}
 
 	/**
-	 * Washes all ink off a map, as when it is dipped into a water cauldron.
+	 * Waters all of a map's ink and labels down one step, as when it is dipped
+	 * into a water cauldron: four dips wash full ink off.
 	 *
-	 * @return whether there was ink to wash off
+	 * @return whether there was ink to water down
 	 */
 	public static boolean wash(MinecraftServer server, MapId mapId) {
 		InkData data = InkData.get(server);
@@ -321,7 +330,7 @@ public final class InkManager {
 		if (layer == null || layer.isSealed() || !layer.hasInk()) {
 			return false;
 		}
-		layer.clear();
+		layer.fade();
 		data.setDirty();
 
 		MapItemSavedData map = server.overworld().getMapData(mapId);

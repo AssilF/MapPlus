@@ -5,6 +5,7 @@ import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
 import com.assilf.mapplus.ink.MarkDecorations;
 import com.assilf.mapplus.net.MapMarksPayload;
+import com.assilf.mapplus.net.MapTintsPayload;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.protocol.Packet;
@@ -25,11 +26,12 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Draws ink into the map pixels sent to players, and adds the map's labels and
- * pins to the markers sent with them. Only the packet changes; the map's saved
- * data never does, so vanilla clients see ink and pins, and removing the mod
- * leaves maps untouched. Players with the mod are sent the labels and pins
- * themselves too, whenever they change.
+ * Draws ink into the map pixels sent to players, and adds the map's marks to
+ * the markers sent to players without the mod. Only the packet changes; the
+ * map's saved data never does, so vanilla clients see ink and marks, and
+ * removing the mod leaves maps untouched. Players with the mod are sent the
+ * marks and the watered down ink themselves instead, whenever they change, and
+ * draw them over the map.
  */
 @Mixin(MapItemSavedData.HoldingPlayer.class)
 public abstract class HoldingPlayerMixin {
@@ -40,6 +42,12 @@ public abstract class HoldingPlayerMixin {
 	/** The version of the map's marks this player was last sent, or 0 for none. */
 	@Unique
 	private int mapplus$marksSent;
+
+	/** The version of the map's ink whose tints this player was last sent, and whether there were any. */
+	@Unique
+	private int mapplus$tintsSent;
+	@Unique
+	private boolean mapplus$hadTints;
 
 	@ModifyReturnValue(method = "nextUpdatePacket", at = @At("RETURN"))
 	private Packet<?> mapplus$drawInk(Packet<?> packet, MapId mapId) {
@@ -55,16 +63,26 @@ public abstract class HoldingPlayerMixin {
 			return packet;
 		}
 
+		boolean modded = player instanceof ServerPlayer serverPlayer && MapPlus.hasMod(serverPlayer);
+		// Sent before the pixels, so the map is blended with the tints that go with them.
+		if (modded && mapplus$tintsSent != layer.inkVersion()) {
+			mapplus$tintsSent = layer.inkVersion();
+			boolean hasTints = layer.hasTints();
+			if (hasTints || mapplus$hadTints) {
+				ServerPlayNetworking.send((ServerPlayer) player, new MapTintsPayload(mapId.id(), layer.tints()));
+			}
+			mapplus$hadTints = hasTints;
+		}
+
 		Optional<MapItemSavedData.MapPatch> patch = mapPacket.colorPatch().map(colors -> {
 			byte[] inked = colors.mapColors().clone();
-			layer.overlay(colors.startX(), colors.startY(), colors.width(), colors.height(), inked);
+			layer.overlay(colors.startX(), colors.startY(), colors.width(), colors.height(), inked, !modded);
 			return new MapItemSavedData.MapPatch(colors.startX(), colors.startY(), colors.width(), colors.height(), inked);
 		});
 
-		boolean modded = player instanceof ServerPlayer serverPlayer && MapPlus.hasMod(serverPlayer);
 		Optional<List<MapDecoration>> decorations = mapPacket.decorations();
-		if (decorations.isPresent() && !layer.marks().isEmpty()) {
-			decorations = Optional.of(MarkDecorations.withMarks(decorations.get(), layer.marks(), !modded));
+		if (!modded && decorations.isPresent() && !layer.marks().isEmpty()) {
+			decorations = Optional.of(MarkDecorations.withMarks(decorations.get(), layer.marks()));
 		}
 		// Sent with the markers, which are resent whenever the marks change.
 		if (modded && mapPacket.decorations().isPresent() && mapplus$marksSent != layer.marksVersion()) {

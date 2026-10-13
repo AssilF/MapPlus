@@ -8,36 +8,67 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.item.DyeColor;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Something placed on a map for planning: a label (text written with a sign)
- * or a pin (a banner's marker). Kept with the map's ink, so every copy of the
- * map shows it.
+ * Something placed on a map for planning: a label (text written with a sign),
+ * a pin (a banner, with its design) or an icon (a pottery sherd's picture,
+ * stamped in ink). Kept with the map's ink, so every copy of the map shows it.
  *
  * @param id     tells the marks on one map apart
  * @param x      the map pixel the mark is centered on, 0 to 127
  * @param y      the map pixel the mark is centered on, 0 to 127
- * @param color  the label's ink, or the pin's banner color
- * @param text   the label's text, or the pin's name (empty for none)
- * @param size   a label's text size, {@link #SMALL} to {@link #LARGE}
+ * @param color  the label's or icon's ink, or the pin's banner color
+ * @param text   the label's text, or the pin's or icon's name (empty for none)
+ * @param size   how big it's drawn, {@link #SMALL} to {@link #LARGE}
  * @param author who placed it, for server logs and moderation
+ * @param fade   how watered down a label's or icon's ink is, {@link Ink#FULL} to {@link Ink#FAINTEST}
+ * @param symbol an icon's picture: the sherd's pottery pattern texture, as in {@code minecraft:skull_pottery_pattern}
+ * @param layers a pin's banner patterns, bottom first
  */
-public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text, int size, Optional<UUID> author) {
+public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text, int size, Optional<UUID> author,
+		int fade, String symbol, List<Layer> layers) {
 	public static final int SMALL = 0;
 	public static final int MEDIUM = 1;
 	public static final int LARGE = 2;
 	public static final int MAX_TEXT = 32;
+	/** Banners get at most six patterns from a loom; commands can add more. */
+	public static final int MAX_LAYERS = 16;
+	private static final int MAX_ID_LENGTH = 256;
 
 	public enum Kind {
-		LABEL,
-		PIN
+		LABEL("label"),
+		PIN("pin"),
+		ICON("icon");
+
+		private final String id;
+
+		Kind(String id) {
+			this.id = id;
+		}
+	}
+
+	/** One pattern on a banner: its texture, as in {@code minecraft:creeper}, and its dye. */
+	public record Layer(String asset, DyeColor color) {
+		public static final Codec<Layer> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+				Codec.STRING.fieldOf("asset").forGetter(Layer::asset),
+				DyeColor.CODEC.fieldOf("color").forGetter(Layer::color)
+		).apply(instance, Layer::new));
 	}
 
 	private static final Codec<Kind> KIND_CODEC = Codec.STRING.xmap(
-			name -> "pin".equals(name) ? Kind.PIN : Kind.LABEL,
-			kind -> kind == Kind.PIN ? "pin" : "label"
+			name -> {
+				for (Kind kind : Kind.values()) {
+					if (kind.id.equals(name)) {
+						return kind;
+					}
+				}
+				return Kind.LABEL;
+			},
+			kind -> kind.id
 	);
 
 	public static final Codec<Mark> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -48,40 +79,74 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 			DyeColor.CODEC.optionalFieldOf("color", DyeColor.BLACK).forGetter(Mark::color),
 			Codec.STRING.optionalFieldOf("text", "").forGetter(Mark::text),
 			Codec.INT.optionalFieldOf("size", MEDIUM).forGetter(Mark::size),
-			UUIDUtil.CODEC.optionalFieldOf("author").forGetter(Mark::author)
+			UUIDUtil.CODEC.optionalFieldOf("author").forGetter(Mark::author),
+			Codec.INT.optionalFieldOf("fade", Ink.FULL).forGetter(Mark::fade),
+			Codec.STRING.optionalFieldOf("symbol", "").forGetter(Mark::symbol),
+			Layer.CODEC.listOf().optionalFieldOf("layers", List.of()).forGetter(Mark::layers)
 	).apply(instance, Mark::new));
 
 	/** Marks as sent to players: without the author. */
 	public static final StreamCodec<FriendlyByteBuf, Mark> STREAM_CODEC = StreamCodec.of(
 			(buf, mark) -> {
 				buf.writeVarInt(mark.id);
-				buf.writeBoolean(mark.kind == Kind.PIN);
+				buf.writeByte(mark.kind.ordinal());
 				buf.writeByte(mark.x);
 				buf.writeByte(mark.y);
 				buf.writeByte(mark.color.getId());
 				buf.writeUtf(mark.text, MAX_TEXT * 4);
 				buf.writeByte(mark.size);
+				buf.writeByte(mark.fade);
+				buf.writeUtf(mark.symbol, MAX_ID_LENGTH);
+				buf.writeByte(mark.layers.size());
+				for (Layer layer : mark.layers) {
+					buf.writeUtf(layer.asset(), MAX_ID_LENGTH);
+					buf.writeByte(layer.color().getId());
+				}
 			},
 			buf -> {
 				int id = buf.readVarInt();
-				Kind kind = buf.readBoolean() ? Kind.PIN : Kind.LABEL;
+				int kind = buf.readUnsignedByte();
 				int x = buf.readUnsignedByte();
 				int y = buf.readUnsignedByte();
-				int color = buf.readUnsignedByte();
+				DyeColor color = readDye(buf);
 				String text = buf.readUtf(MAX_TEXT * 4);
 				int size = buf.readUnsignedByte();
-				if (color >= DyeColor.values().length) {
-					throw new DecoderException("Bad mark color " + color);
+				int fade = buf.readUnsignedByte();
+				String symbol = buf.readUtf(MAX_ID_LENGTH);
+				int count = buf.readUnsignedByte();
+				if (kind >= Kind.values().length || count > MAX_LAYERS) {
+					throw new DecoderException("Bad mark");
 				}
-				return new Mark(id, kind, clampPixel(x), clampPixel(y), DyeColor.byId(color), text, clampSize(size), Optional.empty());
+				List<Layer> layers = new ArrayList<>(count);
+				for (int i = 0; i < count; i++) {
+					String asset = buf.readUtf(MAX_ID_LENGTH);
+					layers.add(new Layer(asset, readDye(buf)));
+				}
+				return new Mark(id, Kind.values()[kind], x, y, color, text, size, Optional.empty(), fade, symbol, layers);
 			}
 	);
+
+	private static DyeColor readDye(FriendlyByteBuf buf) {
+		int color = buf.readUnsignedByte();
+		if (color >= DyeColor.values().length) {
+			throw new DecoderException("Bad mark color " + color);
+		}
+		return DyeColor.byId(color);
+	}
+
+	/** A label or plain pin: full ink, no picture. */
+	public Mark(int id, Kind kind, int x, int y, DyeColor color, String text, int size, Optional<UUID> author) {
+		this(id, kind, x, y, color, text, size, author, Ink.FULL, "", List.of());
+	}
 
 	public Mark {
 		x = clampPixel(x);
 		y = clampPixel(y);
 		size = clampSize(size);
 		text = text == null ? "" : text;
+		fade = Ink.clampStrength(fade);
+		symbol = symbol == null ? "" : symbol;
+		layers = layers == null ? List.of() : List.copyOf(layers.subList(0, Math.min(layers.size(), MAX_LAYERS)));
 	}
 
 	public static int clampPixel(int value) {
@@ -115,12 +180,43 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 		return (int) text.codePoints().filter(c -> !Character.isWhitespace(c)).count() * costPerLetter(size);
 	}
 
+	/** Ink a sherd's icon costs at this size, in pixels. */
+	public static int iconCost(int size) {
+		return switch (clampSize(size)) {
+			case SMALL -> 8;
+			case LARGE -> 32;
+			default -> 16;
+		};
+	}
+
+	/** Ink this mark took to make, in pixels: nothing for a pin, which is a banner. */
+	public int cost() {
+		return switch (kind) {
+			case LABEL -> cost(text, size);
+			case ICON -> iconCost(size);
+			case PIN -> 0;
+		};
+	}
+
 	public boolean isLabel() {
 		return kind == Kind.LABEL;
 	}
 
+	/** Whether the mark is made of ink, so water fades it: labels and icons. Pins are banners. */
+	public boolean isInk() {
+		return kind != Kind.PIN;
+	}
+
 	public Mark at(int newX, int newY) {
-		return new Mark(id, kind, newX, newY, color, text, size, author);
+		return new Mark(id, kind, newX, newY, color, text, size, author, fade, symbol, layers);
+	}
+
+	public Mark withSize(int newSize) {
+		return new Mark(id, kind, x, y, color, text, newSize, author, fade, symbol, layers);
+	}
+
+	public Mark withFade(int newFade) {
+		return new Mark(id, kind, x, y, color, text, size, author, newFade, symbol, layers);
 	}
 
 	/**

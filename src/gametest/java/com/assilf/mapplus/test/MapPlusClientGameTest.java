@@ -5,6 +5,7 @@ import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
+import com.assilf.mapplus.ink.Mark;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -15,6 +16,7 @@ import net.minecraft.client.gui.screens.inventory.BookEditScreen;
 import net.minecraft.client.gui.screens.inventory.BookViewScreen;
 import net.minecraft.client.gui.screens.inventory.CartographyTableScreen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -30,6 +32,8 @@ import net.minecraft.world.item.MapItem;
 import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BannerPatternLayers;
+import net.minecraft.world.level.block.entity.BannerPatterns;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
@@ -41,7 +45,7 @@ import java.util.function.Consumer;
  * screenshots on the way.
  */
 public class MapPlusClientGameTest implements FabricClientGameTest {
-	private static final int CANVAS_X = 179;
+	private static final int CANVAS_X = 187;
 	private static final int CANVAS_Y = 8;
 	private static final int RACK_X = 179;
 	private static final int RACK_Y = 141;
@@ -51,6 +55,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 	private static final int CHAIN = 5;
 	private static final int SIGN = 6;
 	private static final int BANNER = 7;
+	private static final int SHERD = 8;
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
@@ -66,8 +71,12 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 				ItemStack banner = new ItemStack(Items.BANNER.pick(DyeColor.BLUE));
 				banner.set(DataComponents.CUSTOM_NAME, Component.literal("Town Hall"));
+				banner.set(DataComponents.BANNER_PATTERNS, new BannerPatternLayers(List.of(new BannerPatternLayers.Layer(
+						minecraft.registryAccess().lookupOrThrow(Registries.BANNER_PATTERN).getOrThrow(BannerPatterns.CREEPER), DyeColor.WHITE))));
+				ItemStack sherd = new ItemStack(Items.SKULL_POTTERY_SHERD);
+				sherd.set(DataComponents.CUSTOM_NAME, Component.literal("Danger"));
 				for (ItemStack tool : List.of(new ItemStack(Items.FEATHER), new ItemStack(Items.ITEM_FRAME), new ItemStack(Items.BUCKET),
-						new ItemStack(Items.IRON_CHAIN), new ItemStack(Items.OAK_SIGN), banner)) {
+						new ItemStack(Items.IRON_CHAIN), new ItemStack(Items.OAK_SIGN), banner, sherd)) {
 					player.getInventory().add(tool);
 				}
 			});
@@ -93,7 +102,8 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.waitTicks(2);
 			context.takeScreenshot("desk_tool_tooltip");
 
-			// Marking up: a plot fenced with a dashed border and filled, the box filled, a label typed with a sign and a banner pinned.
+			// Marking up: a plot fenced with a dashed border and tinted with watered down ink, the box filled, a large label
+			// typed with a sign, a banner pinned and a sherd's picture stamped.
 			clickTool(context, CHAIN);
 			drag(context, 4, 70, 26, 70);
 			drag(context, 26, 70, 26, 122);
@@ -101,40 +111,68 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			drag(context, 4, 122, 4, 70);
 			clickTool(context, BUCKET);
 			context.waitTicks(5);
+			hover(context, CANVAS_X + 15, CANVAS_Y + 95);
+			context.getInput().scroll(-2);
+			context.waitTicks(2);
+			context.takeScreenshot("desk_strength");
 			clickCanvas(context, 15, 95);
+			context.getInput().scroll(2);
 			clickCanvas(context, 60, 100);
 			clickTool(context, SIGN);
 			clickCanvas(context, 60, 30);
 			context.getInput().typeChars("Base Camp");
+			context.getInput().pressKey(InputConstants.KEY_UP);
+			context.waitTicks(2);
+			context.takeScreenshot("desk_label_typing");
 			context.getInput().pressKey(InputConstants.KEY_RETURN);
 			clickTool(context, BANNER);
 			clickCanvas(context, 100, 98);
+			clickTool(context, SHERD);
+			clickCanvas(context, 100, 40);
 			context.waitTicks(20);
 			context.takeScreenshot("desk_marks");
 			MapId exploredId = explored.get(DataComponents.MAP_ID);
-			int marks = server.computeOnServer(minecraft -> {
+			List<Mark> marks = server.computeOnServer(minecraft -> {
 				InkLayer layer = InkData.get(minecraft).find(exploredId);
-				return layer == null ? 0 : layer.marks().size();
+				return layer == null ? List.of() : List.copyOf(layer.marks());
 			});
-			if (marks != 2) {
-				throw new AssertionError("Expected a label and a pin on the map, found " + marks + " marks");
+			if (marks.size() != 3) {
+				throw new AssertionError("Expected a label, a pin and an icon on the map, found " + marks);
+			}
+			if (marks.get(0).size() != Mark.LARGE || marks.get(1).layers().size() != 1 || !marks.get(2).symbol().contains("skull")) {
+				throw new AssertionError("Expected a large label, a pin with the banner's pattern and the skull sherd's icon, found " + marks);
 			}
 			// The fill stays inside the dashed border: nothing leaks out through the gaps between its dashes.
 			boolean[] fill = server.computeOnServer(minecraft -> {
 				InkLayer layer = InkData.get(minecraft).find(exploredId);
 				return new boolean[] {
-						layer != null && Ink.isPresent(layer.get(15 + 95 * Ink.SIZE)),
+						layer != null && Ink.isPresent(layer.get(15 + 95 * Ink.SIZE)) && Ink.strength(layer.get(15 + 95 * Ink.SIZE)) == 2,
 						layer != null && Ink.isPresent(layer.get(1 + 95 * Ink.SIZE)),
 						layer != null && Ink.isPresent(layer.get(15 + 126 * Ink.SIZE))
 				};
 			});
 			if (!fill[0] || fill[1] || fill[2]) {
-				throw new AssertionError("The fill should cover the fenced plot and nothing outside it");
+				throw new AssertionError("The fill should tint the fenced plot at half strength and nothing outside it");
 			}
 
-			// An empty map is a blank canvas; the drawing is the result.
+			// The marked-up map held in both hands, drawn in the world: the tint, the label, the banner and the icon.
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				player.closeContainer();
+				player.setItemInHand(InteractionHand.MAIN_HAND, explored.copy());
+			});
+			context.waitTicks(5);
+			context.getInput().lookAt(0, 70);
+			context.waitTicks(20);
+			context.takeScreenshot("held_map");
+
+			server.runOnServer(minecraft -> openTable(minecraft, menu -> {
+			}));
+			context.waitForScreen(CartographyTableScreen.class);
+
+			// Paper is a blank canvas; the drawing is the result.
 			server.runOnServer(minecraft -> withTable(minecraft, menu -> {
-				menu.getSlot(CartographyTableMenu.MAP_SLOT).set(new ItemStack(Items.MAP, 2));
+				menu.getSlot(CartographyTableMenu.MAP_SLOT).set(new ItemStack(Items.PAPER, 2));
 				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.INK_SAC, 2));
 			}));
 			context.waitTicks(5);

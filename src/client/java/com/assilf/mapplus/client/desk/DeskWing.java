@@ -2,7 +2,9 @@ package com.assilf.mapplus.client.desk;
 
 import com.assilf.mapplus.client.marks.ClientMarks;
 import com.assilf.mapplus.client.marks.Labels;
+import com.assilf.mapplus.client.marks.MarkRenderer;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkMaterial;
@@ -51,10 +53,10 @@ import java.util.Optional;
 public final class DeskWing {
 	/** The vanilla window is this wide; the wing makes it {@link #WIDTH}. */
 	public static final int VANILLA_WIDTH = 176;
-	public static final int WIDTH = 314;
+	public static final int WIDTH = 330;
 	private static final int HEIGHT = 166;
 
-	private static final int CANVAS_X = 179;
+	private static final int CANVAS_X = 187;
 	private static final int CANVAS_Y = 8;
 	private static final int RACK_X = 179;
 	private static final int RACK_Y = 141;
@@ -63,6 +65,8 @@ public final class DeskWing {
 	/** Borders are dashes this long, with gaps this long. */
 	private static final int DASH = 3;
 	private static final int GAP = 2;
+	/** How long the ink's strength is shown after scrolling, in ticks. */
+	private static final int STRENGTH_SHOWN_TICKS = 30;
 	/** How long an edit is shown before the server's answer, at most. */
 	private static final int PENDING_TICKS = 60;
 	/** The vanilla button that swaps a slot with the off hand. */
@@ -114,6 +118,15 @@ public final class DeskWing {
 	/** The label being typed, or null. */
 	private LabelEdit editing;
 	private double scrolled;
+
+	/**
+	 * How watered down the ink is drawn, {@link Ink#FULL} to {@link Ink#FAINTEST}:
+	 * scrolled over the map with a drawing tool. Kept from table to table.
+	 */
+	private static int strength = Ink.FULL;
+	private int strengthShown;
+	/** Every pixel the pen has touched this stroke, so a pixel crossed twice is inked once. */
+	private final BitSet penStroke = new BitSet(Ink.PIXELS);
 
 	/** A mark edit sent to the server, shown until the map's marks come back changed. */
 	private Mark pending;
@@ -194,12 +207,12 @@ public final class DeskWing {
 			return input.get(DataComponents.MAP_ID);
 		}
 		ItemStack result = menu().getSlot(CartographyTableMenu.RESULT_SLOT).getItem();
-		return input.is(Items.MAP) && result.is(Items.FILLED_MAP) ? result.get(DataComponents.MAP_ID) : null;
+		return DrawingDesk.isBlankCanvas(input) && result.is(Items.FILLED_MAP) ? result.get(DataComponents.MAP_ID) : null;
 	}
 
 	private boolean hasCanvas() {
 		ItemStack input = input();
-		return input.is(Items.FILLED_MAP) || input.is(Items.MAP);
+		return input.is(Items.FILLED_MAP) || DrawingDesk.isBlankCanvas(input);
 	}
 
 	private boolean sealed() {
@@ -217,6 +230,11 @@ public final class DeskWing {
 	/** Pins go on maps that exist: a filled map, or a blank canvas that has been drawn on. */
 	private boolean canPin() {
 		return unlocked(InkTool.PIN) && shownMap() != null && !sealed();
+	}
+
+	/** Icons are stamped in ink, so they can start a blank canvas as a label can. */
+	private boolean canStamp() {
+		return unlocked(InkTool.ICON) && hasCanvas() && labelInk() != null && !sealed();
 	}
 
 	private MapItemSavedData mapData(MapId mapId) {
@@ -316,7 +334,7 @@ public final class DeskWing {
 		preview.extract(graphics, x, y);
 		InkMaterial material = material();
 		if (material != null && !shape.isEmpty()) {
-			InkPreview.drawRuns(graphics, x, y, shape, InkPreview.previewColor(material));
+			InkPreview.drawRuns(graphics, x, y, shape, InkPreview.previewColor(material, strength));
 		}
 
 		InkTool tool = tool();
@@ -326,27 +344,21 @@ public final class DeskWing {
 			// The tool's tip under the cursor.
 			BitSet cursor = new BitSet(Ink.PIXELS);
 			Strokes.dab(cursor, pixelX(mouseX), pixelY(mouseY), tool.size());
-			InkPreview.drawRuns(graphics, x, y, cursor, (InkPreview.previewColor(material) & 0x00FFFFFF) | 0x99000000);
+			int color = InkPreview.previewColor(material, strength);
+			InkPreview.drawRuns(graphics, x, y, cursor, (color & 0x00FFFFFF) | Math.round((color >>> 24) * 0.6F) << 24);
 		}
 	}
 
-	/** Labels being typed, dragged or on their way to the server, drawn on the map at the pose's origin. */
+	/** Marks being typed, dragged or on their way to the server, drawn on the map at the pose's origin. */
 	private void extractEdits(GuiGraphicsExtractor graphics) {
-		if (pending != null && pending.isLabel()) {
-			Labels.draw(graphics, pending.text(), pending.x(), pending.y(), pending.size(), Labels.color(pending.color()));
+		if (pending != null) {
+			MarkRenderer.draw(graphics, pending);
 		}
-		if (dragged != null && dragMoved) {
-			int x = Mark.clampPixel(dragged.x() + dragX - pressX);
-			int y = Mark.clampPixel(dragged.y() + dragY - pressY);
-			if (dragged.isLabel()) {
-				Labels.draw(graphics, dragged.text(), x, y, dragged.size(), Labels.color(dragged.color()));
-			} else {
-				graphics.pose().pushMatrix();
-				graphics.pose().translate(x - 3, y - 4);
-				graphics.pose().scale(0.5F, 0.5F);
-				graphics.item(icon(InkTool.PIN), 0, 0);
-				graphics.pose().popMatrix();
-			}
+		if (dragged != null) {
+			// Shown where it's being dragged, or where it was while the mouse hasn't moved yet.
+			int x = dragMoved ? Mark.clampPixel(dragged.x() + dragX - pressX) : dragged.x();
+			int y = dragMoved ? Mark.clampPixel(dragged.y() + dragY - pressY) : dragged.y();
+			MarkRenderer.draw(graphics, dragged.at(x, y));
 		}
 		if (editing != null) {
 			DyeColor ink = labelInk();
@@ -374,7 +386,17 @@ public final class DeskWing {
 			graphics.itemDecorations(minecraft.font, stack, left() + 15, top() + 52, null);
 		}
 
-		if (overCanvas(mouseX, mouseY) && stroke == null && dragged == null && editing == null) {
+		if (editing != null) {
+			// What the label will look like, and how to size and place it, under the label.
+			List<Component> lines = new ArrayList<>();
+			lines.add(Component.translatable("mapplus.desk.label.size", sizeName(editing.size)));
+			lines.add(Component.translatable("mapplus.desk.label.keys").withStyle(ChatFormatting.GRAY));
+			int below = Math.round(editing.y + 9 * Mark.scale(editing.size) / 2 + 2);
+			graphics.setTooltipForNextFrame(minecraft.font, lines, Optional.empty(), left() + CANVAS_X + editing.x - 12,
+					top() + CANVAS_Y + below);
+		} else if (strengthShown > 0 && overCanvas(mouseX, mouseY) && material() != null) {
+			graphics.setTooltipForNextFrame(minecraft.font, List.of(strengthName(material())), Optional.empty(), mouseX, mouseY);
+		} else if (overCanvas(mouseX, mouseY) && stroke == null && dragged == null) {
 			Component hint = canvasHint(pixelX(mouseX), pixelY(mouseY));
 			if (hint != null) {
 				graphics.setTooltipForNextFrame(minecraft.font, minecraft.font.split(hint, 170), mouseX, mouseY);
@@ -425,10 +447,32 @@ public final class DeskWing {
 			}
 			return shownMap() == null ? Component.translatable("mapplus.desk.hint.pin_canvas") : null;
 		}
+		if (tool == InkTool.ICON) {
+			if (markAt(x, y, Mark.Kind.ICON) != null) {
+				return Component.translatable("mapplus.desk.hint.icon_edit");
+			}
+			return labelInk() == null ? Component.translatable("mapplus.desk.hint.icon_ink") : null;
+		}
 		if (material() == null) {
 			return Component.translatable("mapplus.desk.hint.material");
 		}
 		return null;
+	}
+
+	private static Component sizeName(int size) {
+		return Component.translatable(switch (Mark.clampSize(size)) {
+			case Mark.SMALL -> "mapplus.desk.size.small";
+			case Mark.LARGE -> "mapplus.desk.size.large";
+			default -> "mapplus.desk.size.medium";
+		});
+	}
+
+	/** How the ink in the second slot is drawn at the strength picked: how much of its color, or what water does. */
+	private static Component strengthName(InkMaterial material) {
+		if (material.kind() == InkMaterial.Kind.WATER) {
+			return Component.translatable(strength == Ink.FULL ? "mapplus.desk.strength.erase" : "mapplus.desk.strength.fade");
+		}
+		return Component.translatable("mapplus.desk.strength." + strength);
 	}
 
 	private static int barColor(float left) {
@@ -566,6 +610,7 @@ public final class DeskWing {
 			case PEN, BRUSH -> {
 				if (canDraw(tool)) {
 					stroke = tool;
+					penStroke.clear();
 					lastX = x;
 					lastY = y;
 					penDab(x, y, x, y);
@@ -591,7 +636,7 @@ public final class DeskWing {
 				} else if (hit != null) {
 					startDrag(hit, x, y);
 				} else if (canWrite()) {
-					editing = new LabelEdit(null, x, y, Mark.MEDIUM, "");
+					startEditing(new LabelEdit(null, x, y, Mark.MEDIUM, ""));
 				} else {
 					deny();
 				}
@@ -604,6 +649,18 @@ public final class DeskWing {
 					startDrag(hit, x, y);
 				} else if (canPin()) {
 					sendMark(MarkEditPayload.Action.PIN, -1, x, y, Mark.MEDIUM, "");
+				} else {
+					deny();
+				}
+			}
+			case ICON -> {
+				Mark hit = markAt(x, y, Mark.Kind.ICON);
+				if (sealed()) {
+					deny();
+				} else if (hit != null) {
+					startDrag(hit, x, y);
+				} else if (canStamp() && affordable(Mark.iconCost(Mark.MEDIUM), material())) {
+					sendMark(MarkEditPayload.Action.ICON, -1, x, y, Mark.MEDIUM, "");
 				} else {
 					deny();
 				}
@@ -662,25 +719,61 @@ public final class DeskWing {
 		return true;
 	}
 
+	/**
+	 * Scrolling over the map: while typing a label, sizes it; over a mark with
+	 * its tool, sizes that mark; with a drawing tool, waters the ink down or
+	 * makes it stronger.
+	 */
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-		if (editing == null) {
+		if (editing == null && !(overCanvas(mouseX, mouseY) && hasCanvas() && tool() != null)) {
 			return false;
 		}
-		// Scrolling while typing sizes the label. Touchpads scroll in small steps; change once per whole step.
+		// Touchpads scroll in small steps; change once per whole step.
 		if (Math.signum(amount) != Math.signum(scrolled)) {
 			scrolled = 0;
 		}
 		scrolled += amount;
 		int steps = (int) scrolled;
-		if (steps != 0) {
-			scrolled -= steps;
-			int size = Mark.clampSize(editing.size + steps);
-			// A label never grows wider than the map.
-			if (Labels.width(editing.text.toString(), size) <= Labels.MAX_WIDTH) {
-				editing.size = size;
+		if (steps == 0) {
+			return true;
+		}
+		scrolled -= steps;
+		if (editing != null) {
+			resizeLabel(steps);
+			return true;
+		}
+		InkTool tool = tool();
+		if (tool.draws()) {
+			// Scrolling up makes the ink stronger, down waters it down.
+			strength = Ink.clampStrength(strength - steps);
+			strengthShown = STRENGTH_SHOWN_TICKS;
+			return true;
+		}
+		Mark mark = markAt(pixelX(mouseX), pixelY(mouseY), tool.mark());
+		if (mark != null && unlocked(tool) && !sealed()) {
+			int size = Mark.clampSize(mark.size() + steps);
+			if (size != mark.size() && (!mark.isLabel() || Labels.width(mark.text(), size) <= Labels.MAX_WIDTH)) {
+				Mark resized = mark.withSize(size);
+				int cost = Math.max(0, resized.cost() - mark.cost());
+				if (cost > 0 && (labelInk() != mark.color() || !affordable(cost, material()))) {
+					deny();
+					return true;
+				}
+				sendMark(MarkEditPayload.Action.RESIZE, mark.id(), mark.x(), mark.y(), size, "");
+				pending = resized;
+				pendingHidden = mark.id();
+				ClientMarks.hide(shownMap(), mark.id());
 			}
 		}
 		return true;
+	}
+
+	private void resizeLabel(int steps) {
+		int size = Mark.clampSize(editing.size + steps);
+		// A label never grows wider than the map.
+		if (Labels.width(editing.text.toString(), size) <= Labels.MAX_WIDTH) {
+			editing.size = size;
+		}
 	}
 
 	/** While a label is being typed, every key goes to it, so E and the number keys type letters. */
@@ -691,6 +784,8 @@ public final class DeskWing {
 		switch (event.key()) {
 			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> commitLabel();
 			case InputConstants.KEY_ESCAPE -> cancelLabel();
+			case InputConstants.KEY_UP -> resizeLabel(1);
+			case InputConstants.KEY_DOWN -> resizeLabel(-1);
 			case InputConstants.KEY_BACKSPACE -> {
 				int length = editing.text.length();
 				if (length > 0) {
@@ -729,7 +824,10 @@ public final class DeskWing {
 		if (editing != null && (tool() != InkTool.LABEL || !canWrite())) {
 			cancelLabel();
 		}
-		if (dragged != null && tool() != (dragged.isLabel() ? InkTool.LABEL : InkTool.PIN)) {
+		if (strengthShown > 0) {
+			strengthShown--;
+		}
+		if (dragged != null && tool() != InkTool.of(dragged.kind())) {
 			dragged = null;
 			ClientMarks.unhide();
 		}
@@ -755,7 +853,9 @@ public final class DeskWing {
 		pressButton = -1;
 		stroke = null;
 		shape.clear();
-		editing = null;
+		if (editing != null) {
+			stopEditing();
+		}
 		dragged = null;
 		ClientMarks.unhide();
 	}
@@ -765,13 +865,18 @@ public final class DeskWing {
 	private void penDab(int x0, int y0, int x1, int y1) {
 		BitSet pixels = new BitSet(Ink.PIXELS);
 		Strokes.line(pixels, x0, y0, x1, y1, stroke.size());
+		pixels.andNot(penStroke);
+		penStroke.or(pixels);
+		if (pixels.isEmpty()) {
+			return;
+		}
 		if (penSeq == 0) {
 			penSeq = DeskState.nextSeq();
 		}
 		penPixels.or(pixels);
 		InkMaterial material = material();
 		if (material != null) {
-			preview.add(pixels, penSeq, InkPreview.previewColor(material));
+			preview.add(pixels, penSeq, InkPreview.previewColor(material, strength));
 		}
 	}
 
@@ -779,7 +884,7 @@ public final class DeskWing {
 		if (penPixels.isEmpty()) {
 			return;
 		}
-		ClientPlayNetworking.send(new InkStrokePayload(penSeq, target(), false, (BitSet) penPixels.clone()));
+		ClientPlayNetworking.send(new InkStrokePayload(penSeq, target(), false, strength, (BitSet) penPixels.clone()));
 		penPixels.clear();
 		penSeq = 0;
 	}
@@ -813,13 +918,13 @@ public final class DeskWing {
 		if (material == null || pixels.isEmpty()) {
 			return;
 		}
-		if (whole && !affordable(pixels.cardinality(), material)) {
+		if (whole && !affordable((pixels.cardinality() * material.quarters(strength) + 3) / 4, material)) {
 			deny();
 			return;
 		}
 		int seq = DeskState.nextSeq();
-		preview.add(pixels, seq, InkPreview.previewColor(material));
-		ClientPlayNetworking.send(new InkStrokePayload(seq, target(), whole, pixels));
+		preview.add(pixels, seq, InkPreview.previewColor(material, strength));
+		ClientPlayNetworking.send(new InkStrokePayload(seq, target(), whole, strength, pixels));
 		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1.2F));
 	}
 
@@ -849,8 +954,8 @@ public final class DeskWing {
 			if (mark.kind() != kind) {
 				continue;
 			}
-			float halfWidth = mark.isLabel() ? Math.max(2, Labels.width(mark.text(), mark.size()) / 2) : 4;
-			float halfHeight = mark.isLabel() ? Math.max(2, 4.5F * Mark.scale(mark.size())) : 4;
+			float halfWidth = Math.max(2, MarkRenderer.width(mark) / 2);
+			float halfHeight = Math.max(2, MarkRenderer.height(mark) / 2);
 			if (Math.abs(x - mark.x()) <= halfWidth && Math.abs(y - mark.y()) <= halfHeight) {
 				return mark;
 			}
@@ -865,9 +970,7 @@ public final class DeskWing {
 		dragX = x;
 		dragY = y;
 		dragMoved = false;
-		if (mark.isLabel()) {
-			ClientMarks.hide(shownMap(), mark.id());
-		}
+		ClientMarks.hide(shownMap(), mark.id());
 	}
 
 	/** Dropping a mark moves it; dropping it off the map removes it; clicking a label rewrites it. */
@@ -876,7 +979,7 @@ public final class DeskWing {
 		dragged = null;
 		if (!dragMoved) {
 			if (mark.isLabel() && canWrite()) {
-				editing = new LabelEdit(mark, mark.x(), mark.y(), mark.size(), mark.text());
+				startEditing(new LabelEdit(mark, mark.x(), mark.y(), mark.size(), mark.text()));
 				ClientMarks.hide(shownMap(), mark.id());
 			} else {
 				ClientMarks.unhide();
@@ -893,15 +996,29 @@ public final class DeskWing {
 		int x = mark.isLabel() ? Labels.clampX(mark.text(), mark.size(), toX) : Mark.clampPixel(toX);
 		int y = mark.isLabel() ? Labels.clampY(mark.size(), toY) : Mark.clampPixel(toY);
 		sendMark(MarkEditPayload.Action.MOVE, mark.id(), x, y, mark.size(), "");
-		if (mark.isLabel()) {
-			pending = mark.at(x, y);
-			pendingHidden = mark.id();
-		}
+		pending = mark.at(x, y);
+		pendingHidden = mark.id();
+	}
+
+	/**
+	 * Starts typing a label. Keyboard text only reaches the game while text
+	 * input is on, as it is for a focused text box, so it's turned on until the
+	 * label is placed or dropped.
+	 */
+	private void startEditing(LabelEdit edit) {
+		editing = edit;
+		scrolled = 0;
+		minecraft.textInputManager().startTextInput(this);
+	}
+
+	private void stopEditing() {
+		editing = null;
+		minecraft.textInputManager().stopTextInput(this);
 	}
 
 	private void commitLabel() {
 		LabelEdit edit = editing;
-		editing = null;
+		stopEditing();
 		String text = Mark.clean(edit.text.toString());
 		DyeColor ink = labelInk();
 		if (text.isEmpty() || ink == null) {
@@ -925,7 +1042,7 @@ public final class DeskWing {
 	}
 
 	private void cancelLabel() {
-		editing = null;
+		stopEditing();
 		ClientMarks.unhide();
 	}
 

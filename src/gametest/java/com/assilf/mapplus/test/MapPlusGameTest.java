@@ -83,17 +83,24 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** Washing removes ink, and the next packet resends the map's own colors. */
+	/** Each wash waters ink down a step; four wash full ink off, and the next packet resends the map's own colors. */
 	@GameTest
-	public void washingRemovesInk(GameTestHelper helper) {
+	public void washingFadesInk(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
 		MapItemSavedData map = level.getMapData(mapId);
 		int index = 20 + 30 * Ink.SIZE;
-		InkData.get(level.getServer()).getOrCreate(mapId).set(index, Ink.encode(DyeColor.BLUE, true));
+		InkLayer layer = InkData.get(level.getServer()).getOrCreate(mapId);
+		layer.set(index, Ink.encode(DyeColor.BLUE, true));
 
-		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("Wash should remove ink"));
-		helper.assertFalse(InkManager.wash(level.getServer(), mapId), Component.literal("Second wash has nothing to remove"));
+		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("Wash should water ink down"));
+		helper.assertValueEqual(Ink.strength(layer.get(index)), 1, Component.literal("strength after one wash"));
+		helper.assertTrue(Ink.isGlow(layer.get(index)) && Ink.dye(layer.get(index)) == DyeColor.BLUE, Component.literal("still glowing blue"));
+		for (int i = 0; i < 3; i++) {
+			helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("Wash " + (i + 2) + " should water ink down"));
+		}
+		helper.assertFalse(Ink.isPresent(layer.get(index)), Component.literal("Four washes take full ink off"));
+		helper.assertFalse(InkManager.wash(level.getServer(), mapId), Component.literal("Fifth wash has nothing to remove"));
 
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
 		MapItemSavedData.MapPatch patch = firstPatch(helper, map, mapId, player);
@@ -448,7 +455,7 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** Washing takes ink and labels off a map; pins are banners, not ink, and stay. */
+	/** Washing waters labels down until they're gone; pins are banners, not ink, and stay. */
 	@GameTest
 	public void washingKeepsPins(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
@@ -456,8 +463,95 @@ public class MapPlusGameTest {
 		InkLayer layer = InkData.get(level.getServer()).getOrCreate(mapId);
 		layer.putMark(new Mark(1, Mark.Kind.LABEL, 10, 10, DyeColor.BLACK, "Farm", Mark.MEDIUM, Optional.empty()));
 		layer.putMark(new Mark(2, Mark.Kind.PIN, 20, 20, DyeColor.RED, "", Mark.MEDIUM, Optional.empty()));
-		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("a label washes off"));
-		helper.assertTrue(layer.marks().size() == 1 && !layer.marks().getFirst().isLabel(), Component.literal("the pin stays"));
+		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("a label washes"));
+		helper.assertValueEqual(layer.findMark(1).fade(), 1, Component.literal("the label fades a step"));
+		for (int i = 0; i < 3; i++) {
+			InkManager.wash(level.getServer(), mapId);
+		}
+		helper.assertTrue(layer.marks().size() == 1 && !layer.marks().getFirst().isLabel(), Component.literal("the label washed off, the pin stays"));
+		helper.succeed();
+	}
+
+	/**
+	 * Watered down ink costs less, tints the map, and only water makes it
+	 * fainter. Players without the mod see it as a pattern over the map.
+	 */
+	@GameTest
+	public void tintsAreWateredDownInk(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 1));
+
+		InkManager.draw(player, menu, level, new InkStrokePayload(1, mapId.id(), false, 2, pixels(0, 1, 128, 129)));
+		InkLayer layer = InkData.get(level.getServer()).find(mapId);
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 2, Component.literal("drawn at half strength"));
+		InkMaterial red = new InkMaterial(InkMaterial.Kind.DYE, DyeColor.RED);
+		helper.assertValueEqual(red.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY)), red.perItem() - 2,
+				Component.literal("four pixels at half strength cost two"));
+
+		MapItemSavedData.MapPatch patch = firstPatch(helper, map, mapId, helper.makeMockPlayer(GameType.SURVIVAL));
+		helper.assertValueEqual(patch.mapColors()[(0 - patch.startX()) - patch.startY() * patch.width()], Ink.toMapColor(layer.get(0)),
+				Component.literal("half strength shows on its half of the pattern"));
+		helper.assertValueEqual(patch.mapColors()[(1 - patch.startX()) - patch.startY() * patch.width()], map.colors[1],
+				Component.literal("and the map shows through the other half"));
+
+		InkManager.draw(player, menu, level, new InkStrokePayload(2, mapId.id(), false, 3, pixels(0)));
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 2, Component.literal("fainter dye doesn't water ink down"));
+		InkManager.draw(player, menu, level, new InkStrokePayload(3, mapId.id(), false, 1, pixels(0)));
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 1, Component.literal("stronger dye makes it stronger"));
+
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(PotionContents.createItemStack(Items.POTION, Potions.WATER));
+		InkManager.draw(player, menu, level, new InkStrokePayload(4, mapId.id(), false, 1, pixels(0, 1)));
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 2, Component.literal("watered water fades a step"));
+		helper.assertValueEqual(Ink.strength(layer.get(1)), 3, Component.literal("to the faintest"));
+		InkManager.draw(player, menu, level, new InkStrokePayload(5, mapId.id(), false, 1, pixels(1)));
+		helper.assertFalse(Ink.isPresent(layer.get(1)), Component.literal("and past it, off the map"));
+		helper.succeed();
+	}
+
+	/** A sherd stamps its picture in the second slot's dye; marks are sized by scrolling, and growing a label costs ink. */
+	@GameTest
+	public void iconsAndSizes(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		helper.setBlock(new BlockPos(0, 0, 1), Blocks.LOOM);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.GREEN), 1));
+		InkMaterial green = new InkMaterial(InkMaterial.Kind.DYE, DyeColor.GREEN);
+
+		ItemStack sherd = new ItemStack(Items.SHEAF_POTTERY_SHERD);
+		sherd.set(DataComponents.CUSTOM_NAME, Component.literal("Wheat farm"));
+		menu.setCarried(sherd);
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(1, mapId.id(), MarkEditPayload.Action.ICON, -1, 50, 50, Mark.MEDIUM, "")),
+				Component.literal("icon stamped"));
+		Mark icon = data.find(mapId).marks().getFirst();
+		helper.assertTrue(icon.kind() == Mark.Kind.ICON && icon.color() == DyeColor.GREEN && icon.symbol().contains("sheaf")
+				&& icon.text().equals("Wheat farm"), Component.literal("a green sheaf named after its sherd, got " + icon));
+		helper.assertValueEqual(green.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY)), green.perItem() - Mark.iconCost(Mark.MEDIUM),
+				Component.literal("the icon costs its ink"));
+
+		menu.setCarried(new ItemStack(Items.OAK_SIGN));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(2, mapId.id(), MarkEditPayload.Action.WRITE, -1, 20, 20, Mark.SMALL, "Farms")),
+				Component.literal("label written"));
+		Mark label = data.find(mapId).marks().get(1);
+		int before = green.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(3, mapId.id(), MarkEditPayload.Action.RESIZE, label.id(), 0, 0, Mark.LARGE, "")),
+				Component.literal("label made larger"));
+		helper.assertValueEqual(data.find(mapId).findMark(label.id()).size(), Mark.LARGE, Component.literal("label's new size"));
+		helper.assertValueEqual(before - green.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY)),
+				Mark.cost("Farms", Mark.LARGE) - Mark.cost("Farms", Mark.SMALL), Component.literal("growing pays for the difference"));
+		helper.assertFalse(MarkManager.edit(player, menu, level, new MarkEditPayload(4, mapId.id(), MarkEditPayload.Action.RESIZE, icon.id(), 0, 0, Mark.SMALL, "")),
+				Component.literal("an icon isn't sized with a sign"));
+		menu.setCarried(sherd);
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(5, mapId.id(), MarkEditPayload.Action.RESIZE, icon.id(), 0, 0, Mark.SMALL, "")),
+				Component.literal("icon made smaller, with its sherd"));
 		helper.succeed();
 	}
 

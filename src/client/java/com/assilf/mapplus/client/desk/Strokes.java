@@ -165,7 +165,8 @@ public final class Strokes {
 		if (pending.get(pixel)) {
 			return -2;
 		}
-		return Ink.isPresent(ink[pixel]) ? Ink.dye(ink[pixel]).getId() : -1;
+		// Ink floods ink of its own color and strength, so a tinted zone fills apart from its border.
+		return Ink.isPresent(ink[pixel]) ? Ink.dye(ink[pixel]).getId() + 16 * Ink.strength(ink[pixel]) : -1;
 	}
 
 	private static int visit(BitSet out, IntPredicate passes, int pixel, int[] stack, int size) {

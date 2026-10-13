@@ -16,17 +16,20 @@ import java.util.BitSet;
 final class InkPreview {
 	private static final int GLOW_TINT = 0x66FFFFFF;
 	private static final int ERASE_TINT = 0xB0D6BE96;
+	private static final int FADE_TINT = 0x60D6BE96;
 
 	private final int[] colors = new int[Ink.PIXELS];
 	private final int[] strokes = new int[Ink.PIXELS];
 	private int count;
 
-	/** The color a material shows on a pixel before the server confirms it. */
-	static int previewColor(InkMaterial material) {
+	/** The color a material shows on a pixel before the server confirms it, at a strength. */
+	static int previewColor(InkMaterial material, int strength) {
 		return switch (material.kind()) {
-			case DYE -> material.dye().getMapColor().calculateARGBColor(MapColor.Brightness.NORMAL);
+			case DYE -> Math.round(Ink.opacity(strength) * 255) << 24
+					| material.dye().getMapColor().calculateARGBColor(MapColor.Brightness.NORMAL) & 0xFFFFFF;
 			case GLOW -> GLOW_TINT;
-			case WATER -> ERASE_TINT;
+			// Fading only lightens the ink; erasing shows the map's paper.
+			case WATER -> strength == Ink.FULL ? ERASE_TINT : FADE_TINT;
 		};
 	}
 
