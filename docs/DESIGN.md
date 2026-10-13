@@ -253,16 +253,20 @@ brush, bucket, shears, glow ink sac, string).
   so it never hides the pixel being drawn.
 - The row under the map becomes a rack of these six tools. Clicking one picks it
   up from your inventory (an ordinary vanilla click on the slot holding it) and
-  puts what you were carrying there, so switching stays one click. Tools you
-  don't have are faded, with a tooltip such as "Needs a brush".
+  puts what you were carrying there, so switching stays one click. A tool in the
+  off hand counts too: the rack first moves it into the inventory with vanilla's
+  off-hand swap. Tools you don't have are faded, with a tooltip such as "Needs a
+  brush".
 - The brush-size buttons and scroll-to-resize go: the feather is fine, the brush
   is wide.
 - Tools are never used up. Ink pays per pixel, as now.
 - A press that starts on the map owns its drag and release, even if the release
   lands outside the window, so a carried tool is never thrown and vanilla never
   starts splitting it across slots.
-- Shift-clicking an ink in the inventory while carrying a tool swaps it with the
-  ink in the second slot.
+- Shift-clicking an ink in the inventory while carrying a tool adds it to the
+  second slot if it stacks with what's there, and otherwise swaps the two. Two
+  of the same item that can't stack (two water bottles) are never swapped: the
+  swap has to end vanilla's shift-click repeat, or it would never stop.
 - The server accepts strokes only while the carried item is a tool, and at most
   4 stroke packets per player per tick.
 - Players without the mod keep the plain vanilla table.
@@ -296,22 +300,33 @@ cut a line.
   along the hotbar, scrolling to change color.
 - On 26.3 the client sends the exact point it clicked on the frame. The server
   turns it into a map pixel using the frame's facing and the map's rotation.
-- Holding use repeats every 4 ticks, so a dab within 5 ticks of the previous one
-  on the same frame is joined to it with a line: sweeping paints a stroke.
-- Painting replaces rotating. If the ink runs out mid-hold, clicks are
-  swallowed for 10 ticks so the map doesn't start spinning.
+- Holding use repeats every 4 ticks, so a dab within 8 ticks (two repeats) of
+  the previous one on the same frame is joined to it with a line: sweeping
+  paints a stroke. One dab is applied per tick; a second one arriving in the
+  same tick waits for the next (at most two wait), so lag doesn't leave gaps.
+- Painting replaces rotating. A held right-click that runs out of ink, or hits a
+  sealed map, keeps being swallowed for as long as it's held, so the map never
+  starts spinning.
 - Cost as at the table: changed pixels only, from the ink in hand, with the same
   wear model and the same leftover charge. A used-up water bottle becomes a glass
   bottle in that hand. Free in creative.
-- Vanilla behavior runs instead for fixed or invulnerable frames, frames holding
-  anything but a filled map, adventure and spectator mode (`mayBuild`) and spawn
-  protection. The hook sits inside vanilla's frame interaction, so claim mods
-  that stop a player using a frame stop painting too.
+- Painting needs what taking the map down needs, not just what rotating it
+  needs: build rights (`mayBuild`, so not in adventure or spectator mode), no
+  spawn protection, a frame that isn't fixed or invulnerable, and a pass from
+  Fabric's attack-entity event for that frame (asked without attacking it), which
+  is how claim mods guard taking items out of frames. Where a player may rotate
+  a frame but not break it, the frame only rotates.
+- The hook replaces vanilla's rotate step, after vanilla's own checks and after
+  other mods have had their say on the interaction.
 - A sealed map refuses with an action bar message and doesn't rotate either.
 - Against hacked clients: the point must be within entity reach of the eyes and
-  in clear line of sight, and at most one dab is applied per tick.
-- For 10 ticks after a dab, the other hand's item can't be used on its own, so
-  missing the frame mid-stroke doesn't drink the water bottle or dye a sign.
+  in clear line of sight.
+- For 10 ticks after a dab or a swallowed click (each one starts the 10 ticks
+  again), the server refuses every other use by that player, in either hand:
+  no drinking the water bottle, dyeing a sign, putting the feather in the next
+  frame, rotating other frames or brushing a block when the crosshair slips off
+  the map. It re-syncs the hands so a vanilla client drops a drink or brush it
+  started on its own and keeps repeating.
 - Feedback: the arm swings; the painter sees the change at once, others at the
   usual framed-map refresh; a quiet, rate-limited sound for the painter.
 - Players without the mod can paint too: it all runs on the server.
@@ -319,7 +334,7 @@ cut a line.
   how many pixels, which map, where.
 - Not on frames: fill, box, labels (later, with a sign) and blank canvases.
 
-**Implementation:** a server-side mixin at the head of
+**Implementation:** a server-side mixin around the rotate step of
 `ItemFrame.interact(Player, InteractionHand, Vec3)`; `FramePixels` maps a point
 to a pixel (tested for 6 facings × 4 rotations); `Strokes` moves to common code;
 `InkManager.draw` splits into the desk checks and a shared `apply`; the wallet
@@ -331,9 +346,12 @@ Ink belongs to the map id, so anyone holding a copy can draw on every copy,
 including a framed mural. Framed-map painting, watering down and labels make
 that easier, so:
 
-- Sealing is the owner's lock, and seals remember who sealed them. Only that
-  player or an operator can scrape a seal off (server setting `sealsAreOwned`,
-  on).
+- Sealing is the owner's lock. MapPlus records each map's maker in its own data
+  when the map is made (an empty map used, or a blank canvas made at the table);
+  locking and zooming keep the maker. With `sealsAreOwned` (on), a seal can only
+  be scraped off by whoever sealed it, the map's maker or an operator. Maps made
+  before MapPlus have no maker, so their sealer owns the seal. A copy holder can
+  seal the maker's map, but can't lock the maker out.
 - Painting a framed map is only possible where taking the map down would be.
 
 ### Watering ink down
@@ -349,11 +367,17 @@ water and slopes: a fixed checkerboard of ink and terrain.
 **Design:**
 - Four strengths: full, ¾, ½ and ¼. Watered ink shows on its share of a fixed
   2×2 pattern and lets the terrain show on the rest. The pattern follows the
-  map's own pixel grid, so strokes and neighboring wall maps line up. Where the
-  ink shows, it takes the terrain's shade, so slopes show through.
-- Shift while drawing lays a light coat: ¼ of the color on bare map or another
-  color, or one step stronger on the same color (¼ → ½ → ¾ → full), like going
-  over a highlighter again.
+  map's own pixel grid, so strokes and neighboring wall maps line up.
+- Where plain ink shows, it takes the terrain's shade but never brighter than
+  normal, so slopes show through. Glow ink always shows at the bright shade, so
+  it never looks like a sunny slope. Where there's no terrain (unexplored land,
+  blank canvases), ink shows at the normal shade.
+- Shift while drawing lays a light coat: ¼ of the color on bare map, or one step
+  stronger on the same color (¼ → ½ → ¾ → full), like going over a highlighter
+  again. On another color it recolors at that ink's strength; only water makes
+  ink weaker.
+- A light coat raises a pixel at most one step per stroke, however often the
+  stroke crosses it.
 - A water bottle still erases in one pass. With Shift it waters ink down one
   step: full → ¾ → ½ → ¼ → gone.
 - The fill tool with Shift tints or fades a whole area by one step: the quick
@@ -361,13 +385,17 @@ water and slopes: a fixed checkerboard of ink and terrain.
 - On a framed map, Shift is sneaking. In a sketch, Shift.
 - Water cauldron: each dip waters all of a map's ink and labels down one step,
   for one water level. Four dips leave it clean. (Today one dip wipes it all.)
-- Glow keeps the strength. A sealed map refuses all of it.
-- **Cost:** you pay for each pixel whose look changes: it starts showing ink,
-  changes color or glow, or stops showing ink (paid in water). A ¼ coat over 400
-  pixels costs 100, and building it up to full costs 300 more. Lines drawn only
-  on the pattern's visible cells still pay for every pixel you can see.
+- Glow keeps the strength, and only marks pixels that show ink: pixels that show
+  later, as the ink gets stronger, don't glow until glowed. A sealed map refuses
+  all of it.
+- **Cost:** you pay for each pixel whose look changes, once per stroke: it starts
+  showing ink, changes color or glow, or stops showing ink (paid in water). A ¼
+  coat over 400 pixels costs 100, and building it up to full costs 300 more.
+  Lines drawn only on the pattern's visible cells still pay for every pixel you
+  can see.
 - Locking keeps strengths. Zooming out turns each 2×2 block into one pixel whose
-  strength is how many of the four had ink.
+  strength is how many of the four showed ink, in the most common color (and
+  glow) among them.
 - Fill floods by what's drawn, not by the colors shown: ink by its dye and glow
   at any strength, bare map by terrain color ignoring shade. This also fixes
   today's patchy fills on shaded terrain.
@@ -376,7 +404,9 @@ water and slopes: a fixed checkerboard of ink and terrain.
 **Implementation:** bits 5-6 of the ink byte hold how watered it is (0 = full,
 so existing ink reads as full); `InkLayer.overlay` applies the pattern and the
 terrain's shade; the cost rule lives in common code so the desk's estimate
-matches the server; `InkStrokePayload` gets a flags byte (shape, light); the
+matches the server; `InkStrokePayload` gets a flags byte (shape, light) and a
+stroke id, and the server remembers which pixels the current stroke has already
+coated (a framed-map painting session is one stroke); the
 desk receives the shown map's ink layer (all of it when shown, then changed
 rectangles) so fills, previews and estimates work on watered ink;
 `CauldronWashing` fades one step. Ink storage moves to one file per map first.
@@ -411,9 +441,12 @@ borders and the rest.
   down).
 - One line, at most 32 characters and never wider than the map. At most 32
   labels per map (server setting).
-- **Cost:** letters are ink: 4, 9 or 16 pixels' worth per letter (small, medium,
-  large), paid when placed, all or nothing. Edits pay only for added letters.
-  Spaces are free. Free in creative.
+- **Cost:** letters are ink: a label costs its visible letters times 4, 9 or 16
+  pixels' worth (small, medium, large), paid when placed, all or nothing. An
+  edit to the text or the size pays whatever it adds to that cost; making a
+  label smaller or shorter is free. A label needs at least one visible letter.
+  Recoloring or glowing a label costs its cost in that ink; erasing or watering
+  it down costs its cost in water. Free in creative.
 - Sealed maps can't get, change, move or lose labels.
 - **Players with the mod** see crisp vanilla text on the map, in the ink's map
   color, wherever the map is drawn: held, framed, on the desk, in an atlas.
@@ -469,9 +502,10 @@ from a book that isn't signed.
 **Design: the bookmark.**
 - The atlas remembers the page it was left open on, and opens there again. A
   held atlas explores with the map of that spread, as now.
-- Stitching puts the map in the bookmarked spread:
-  1. If the spread already holds a map, a new spread is inserted after it: the
-     map on the left, an empty notes page on the right.
+- An empty page here means no text, no map and no sketch. Stitching puts the
+  map in the bookmarked spread:
+  1. If the spread already holds a map or a sketch, a new spread is inserted
+     after it: the map on the left, an empty notes page on the right.
   2. Otherwise, if the bookmarked page is empty, the map goes there.
   3. Otherwise, if the facing page is empty, the map goes there, facing the
      notes you were writing.
@@ -489,35 +523,46 @@ from a book that isn't signed.
   vanilla's page arrows and "Page X of Y". Hovering a page shows its first
   lines, or the map's name.
 - The arrows turn the target spread, as on a lectern. The page belongs to the
-  table; only the result carries the new bookmark.
+  table, and the server keeps it: it starts at the book's bookmark when a book
+  goes in, stays in range as things change, and is sent to the client the way a
+  lectern sends its page. Only the result carries the new bookmark.
 - While stitching, the wing shows the result: exactly where the map lands and
   what it faces.
 
 **Design: cutting a map out.**
 - An unsigned atlas in the top slot and shears in the second slot. Written books
   aren't accepted.
-- The result is the map in the spread shown (or the next map after it), exactly
-  as it was stitched, with its name and markers. Its terrain and ink come along,
-  since they belong to the map id.
+- The result is the map in the spread shown, and nothing if that spread has no
+  map. When an atlas goes on the table, it opens at the first spread from its
+  bookmark on that holds a map. The map comes out exactly as it was stitched,
+  with its name and markers; its terrain and ink come along, since they belong
+  to the map id.
+- With an atlas on top, only shears give a result. Anything else in the second
+  slot leaves the result empty.
 - Taking it removes that map from the atlas in the top slot, the shears take 1
   damage, and they snip. The map's page becomes empty (its text is cleared only
   if it's still the map's name), its notes stay, and no other page moves. The
-  bookmark stays put, so the next map stitched in fills the gap and faces the
-  old notes.
-- The result doesn't move on to the next map, so a shift-click takes exactly
-  one.
+  atlas is bookmarked on the gap, so the next map stitched in fills it and faces
+  the old notes.
+- After a cut the result stays empty until the page is turned. Vanilla repeats
+  a shift-click on the result while it holds the same item, so moving on by
+  itself would cut every map out in one click.
 - When the last map comes out, the book goes back to being a plain book and
-  quill with its notes (a custom name stays).
+  quill with its notes (a custom name stays), unless it still has sketches.
 - To move a map within the atlas: cut it out, turn to the new spread, stitch it
   back.
 
 **Implementation:** the atlas's `selected` becomes `open` (data version 3; old
 atlases read `selected` as `open`); `Atlas.stitch` takes a page and
 `Atlas.cut` is new; the spread-stepping helpers live in common code; the table
-keeps its own page and answers vanilla's menu button packet (1 and 2) for desk
-players only; the result slot works out the cut again from the slots and checks
-the map id before changing anything; the slots accept an atlas on top and shears
-in the second slot, for desk players. Effort: medium.
+keeps its own page in a menu data slot that only desk menus have (both sides
+build the menu knowing it's a desk), and answers vanilla's menu button packet
+(1 and 2) for desk players only. The result slot checks the cut before the map
+leaves it: it works the cut out again from the atlas, the shears and the page,
+and refuses the take unless that gives the same map. Only then does taking it
+remove the plate and wear the shears; vanilla's removal of the inputs never
+runs. The slots accept an atlas on top and shears in the second slot, for desk
+players. Effort: medium.
 
 ### Sketches in a book and quill
 
@@ -540,18 +585,22 @@ holding ink or dye in the other hand.
 - Hold the book and quill and, in the other hand, ink: a dye or ink sac draws, a
   glow ink sac makes sketch ink glow, a water bottle erases (keep it in the off
   hand, or it gets drunk). Shift lays a light coat. Open the book as usual.
-- An empty page (no text, not a map page) becomes a sketch: 60×60, the size of a
-  map pasted on a page.
-- A sketch page acts like a map page: it faces its notes page, the text box is
-  hidden, and turning pages steps over it. Erased completely, it's an empty page
-  again.
+- An empty page (no text, map or sketch) whose facing page holds text, or is
+  also empty, becomes a sketch: 60×60, the size of a map pasted on a page. The
+  page facing a map or another sketch can't, since it's that one's notes.
+- A sketch page acts like a map page everywhere: it faces its notes page, the
+  text box is hidden, turning pages steps over it, maps aren't stitched onto it
+  or facing it, and the book keeps its page even when it's the last one. Erased
+  completely, it's an empty page again.
 - **Cost:** changed pixels, from the ink in hand, with the same wear model and
   leftover charge. A full page is 3,600 pixels; a line drawing is an ink sac or
   two. The page shows an ink bar. Free in creative.
 - Saved like book text: when the book closes, one small message per changed
-  page goes to the server before vanilla's own. The server checks the book, the
-  ink in hand and the page (empty or already a sketch, not a map), charges,
-  applies pixels until the ink runs out and writes the book once.
+  page goes to the server. The server applies vanilla's own edit for that close
+  first (it can arrive later, after the text filter), then checks the book, the
+  ink in hand and each page (empty or already a sketch, not a map), charges,
+  applies pixels until the ink runs out and writes the book once. A page that
+  ends up with text loses its sketch.
 - Signing freezes sketches. Copies of a signed book and lecterns show them.
 - At most 16 sketch pages per book (server setting), stored compressed: well
   within what vanilla lets a book's text hold.
@@ -575,7 +624,7 @@ takes ink from a hand. Effort: medium.
 
 ## Data layout
 
-- `world/data/mapplus/maps/<id>.dat`: ink pixels, labels, vector shapes, zones, pins for map `<id>`.
+- `world/data/mapplus/maps/<id>.dat`: ink pixels, labels, the seal and the map's maker, vector shapes, zones, pins for map `<id>`.
   (Today all ink is in one `ink.dat`; it moves to one file per map before
   watering down and labels add data.)
 - Atlas item `custom_data`: which pages hold which map, the bookmarked page, and
@@ -694,8 +743,9 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - Must a feather (or another tool) be on the cursor to draw, or should an empty
   cursor draw as the pen? Planned: a tool is needed; the rack makes picking one
   up a single click.
-- Should only the player who sealed a map (or an operator) be able to scrape the
-  seal off? Planned: yes on servers (`sealsAreOwned`), unlike vanilla wax.
+- Should seals be owned, so only the sealer, the map's maker or an operator can
+  scrape them off? Planned: yes (`sealsAreOwned`), unlike vanilla wax, because a
+  copy of a map reaches every other copy and a sign never does.
 - A cauldron dip waters a map down one step instead of washing it clean in one
   go. Planned: yes, four dips to clean.
 - Framed-map painting on by default, and open to players without the mod?
