@@ -29,6 +29,7 @@ import net.minecraft.server.network.Filterable;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.CartographyTableMenu;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -165,15 +166,17 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 				player.closeContainer();
 				player.setItemInHand(InteractionHand.MAIN_HAND, explored.copy());
-				NationData.get(minecraft).put(new Post(player.level().dimension(), player.blockPosition().east(24), DyeColor.BLUE, List.of(),
-						"Blueland"));
+				BlockPos post = player.blockPosition().east(24);
+				player.level().setBlockAndUpdate(post, ((BlockItem) Items.BANNER.pick(DyeColor.BLUE)).getBlock().defaultBlockState());
+				NationData.get(minecraft).put(new Post(player.level().dimension(), post, DyeColor.BLUE, List.of(), "Blueland"));
 			});
 			context.waitTicks(25);
 			context.getInput().lookAt(0, 70);
 			context.waitTicks(20);
 			context.takeScreenshot("held_map");
 
-			// Foresight: with the map in the off hand, its ink and labels are projected onto the land around.
+			// Foresight: with the map in the off hand, its ink and labels are projected onto the land around: looking north,
+			// the feather's line and the label written across the ground.
 			server.runOnServer(minecraft -> {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
 				ItemStack helmet = new ItemStack(Items.LEATHER_HELMET);
@@ -183,7 +186,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				player.setItemInHand(InteractionHand.OFF_HAND, explored.copy());
 			});
 			context.waitTicks(10);
-			context.getInput().lookAt(0, 60);
+			context.getInput().lookAt(180, 30);
 			context.waitTicks(10);
 			context.takeScreenshot("foresight");
 

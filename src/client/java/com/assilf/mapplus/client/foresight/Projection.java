@@ -47,8 +47,9 @@ public final class Projection {
 	public static final ResourceKey<Enchantment> FORESIGHT = ResourceKey.create(Registries.ENCHANTMENT, MapPlus.id("foresight"));
 	/** How far around the wearer the map is projected, in blocks. */
 	private static final int REACH = 40;
-	/** How see-through full ink is on the ground; watered down ink is fainter still. */
+	/** How see-through full ink is on the ground; watered down ink is fainter, but never too faint to see. */
 	private static final float GROUND_OPACITY = 0.55F;
+	private static final float FAINTEST_ON_GROUND = 0.45F;
 	private static final float PILLAR_HEIGHT = 3.0F;
 	private static final float PILLAR_HALF_WIDTH = 0.2F;
 	private static final int FULL_BRIGHT = 0xF000F0;
@@ -128,7 +129,7 @@ public final class Projection {
 							continue;
 						}
 						float y = ground + 0.03F;
-						int alpha = Math.round(GROUND_OPACITY * Ink.opacity(Ink.strength(pixel)) * 255);
+						int alpha = Math.round(GROUND_OPACITY * Math.max(FAINTEST_ON_GROUND, Ink.opacity(Ink.strength(pixel))) * 255);
 						int color = alpha << 24 | Ink.dye(pixel).getMapColor().calculateARGBColor(Ink.brightness(pixel)) & 0xFFFFFF;
 						vertices.addVertex(at, x0, y, z0).setColor(color);
 						vertices.addVertex(at, x0, y, z0 + scale).setColor(color);

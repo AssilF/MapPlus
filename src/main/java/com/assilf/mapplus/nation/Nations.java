@@ -40,8 +40,11 @@ public final class Nations {
 	}
 
 	private static final Map<Integer, Cached> TERRITORIES = new HashMap<>();
-	/** The nation each player was last told they're in, by design. */
-	private static final Map<UUID, String> INSIDE = new HashMap<>();
+	/** The nation each player was last told they're in: its design, and its name then, to say when they leave. */
+	private record Inside(String design, Component name) {
+	}
+
+	private static final Map<UUID, Inside> INSIDE = new HashMap<>();
 
 	private Nations() {
 	}
@@ -149,22 +152,18 @@ public final class Nations {
 	/** Tells a player in the action bar when they cross into a nation or out of one. */
 	private static void tell(ServerPlayer player, NationData data) {
 		Post post = holder(player, data, MapPlusConfig.get().postReach);
-		String design = post == null ? null : post.design();
-		String was = INSIDE.get(player.getUUID());
-		if (design == null ? was == null : design.equals(was)) {
+		Inside was = INSIDE.get(player.getUUID());
+		if (post == null ? was == null : was != null && post.design().equals(was.design())) {
 			return;
-		}
-		if (design == null) {
-			INSIDE.remove(player.getUUID());
-		} else {
-			INSIDE.put(player.getUUID(), design);
 		}
 		Component message;
 		if (post != null) {
-			message = Component.translatableWithFallback("mapplus.nation.entering", "Entering %s", nationName(data, post));
+			Component name = nationName(data, post);
+			INSIDE.put(player.getUUID(), new Inside(post.design(), name));
+			message = Component.translatableWithFallback("mapplus.nation.entering", "Entering %s", name);
 		} else {
-			String name = nameOfDesign(data, was);
-			message = Component.translatableWithFallback("mapplus.nation.leaving", "Leaving %s", Component.literal(name));
+			INSIDE.remove(player.getUUID());
+			message = Component.translatableWithFallback("mapplus.nation.leaving", "Leaving %s", was.name());
 		}
 		player.sendOverlayMessage(message);
 	}
@@ -172,10 +171,6 @@ public final class Nations {
 	private static Component nationName(NationData data, Post post) {
 		return Component.literal(data.nameOf(post.design()))
 				.withStyle(style -> style.withColor(TextColor.fromRgb(post.color().getTextColor())));
-	}
-
-	private static String nameOfDesign(NationData data, String design) {
-		return design == null ? "" : data.nameOf(design);
 	}
 
 	/** Forgets worked-out territories, as when the server stops. */
