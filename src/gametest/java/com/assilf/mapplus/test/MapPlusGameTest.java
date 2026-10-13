@@ -847,22 +847,35 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** A map shows a nation's land only once the nation's banner is marked on it. */
+	/** A map shows a nation's land only once the nation's banner is on it: pinned at the table, or marked from the banner. */
 	@GameTest
 	public void bordersShowOnceTheBannerIsOnTheMap(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
-		MapId mapId = newMap(level, at);
-		MapItemSavedData map = level.getMapData(mapId);
-		java.util.Arrays.fill(map.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
 		helper.setBlock(new BlockPos(2, 1, 2), ((BlockItem) Items.BANNER.pick(DyeColor.ORANGE)).getBlock());
 		NationData data = NationData.get(level.getServer());
 		data.put(new Post(level.dimension(), at, DyeColor.ORANGE, List.of(), "Orangeland"));
-		helper.assertTrue(Nations.territory(level.getServer(), mapId, map).isEmpty(), Component.literal("no borders before the banner is marked"));
-		helper.assertTrue(map.toggleBanner(level, at), Component.literal("using the map on the banner marks it"));
-		Territory shown = Nations.territory(level.getServer(), mapId, map);
-		helper.assertValueEqual(shown.owner(MapPixels.pixelX(map, at.getX()) + MapPixels.pixelZ(map, at.getZ()) * Ink.SIZE), 1,
-				Component.literal("the nation's land, once its banner is on the map"));
+
+		MapId pinnedId = newMap(level, at);
+		MapItemSavedData pinned = level.getMapData(pinnedId);
+		java.util.Arrays.fill(pinned.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		int held = MapPixels.pixelX(pinned, at.getX()) + MapPixels.pixelZ(pinned, at.getZ()) * Ink.SIZE;
+		helper.assertTrue(Nations.territory(level.getServer(), pinnedId, pinned).isEmpty(), Component.literal("no borders before the banner is on the map"));
+		InkLayer layer = InkData.get(level.getServer()).getOrCreate(pinnedId);
+		layer.putMark(new Mark(layer.nextMarkId(), Mark.Kind.PIN, 10, 10, DyeColor.ORANGE, "Orangeland", Mark.SMALL, Optional.empty(), Ink.FULL, "",
+				List.of()));
+		helper.assertValueEqual(Nations.territory(level.getServer(), pinnedId, pinned).owner(held), 1,
+				Component.literal("the nation's land, once its banner is pinned on the map"));
+
+		// Vanilla marks a banner from the map only well inside the map's edge.
+		MapId markedId = newMap(level, at);
+		MapItemSavedData marked = level.getMapData(markedId);
+		java.util.Arrays.fill(marked.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		if (Math.abs(at.getX() + 0.5 - marked.centerX) <= 63 && Math.abs(at.getZ() + 0.5 - marked.centerZ) <= 63) {
+			helper.assertTrue(marked.toggleBanner(level, at), Component.literal("using the map on the banner marks it"));
+			helper.assertValueEqual(Nations.territory(level.getServer(), markedId, marked).owner(held), 1,
+					Component.literal("the nation's land, once its banner is marked on the map"));
+		}
 		data.remove(level.dimension(), at);
 		helper.succeed();
 	}
