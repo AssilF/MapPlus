@@ -193,6 +193,34 @@ While looking through a spyglass with a map in the other hand:
 - PNG export of an annotated map or atlas.
 - Client-only mode (later).
 
+## Where MapPlus is going
+
+From the point of view of an SMP player who has kept a map wall in every town
+hall since 1.4:
+
+- **Maps are a server's shared memory.** Bases, roads, mines, farms, claims and
+  plans all end up on maps, and maps end up on walls. MapPlus makes those walls
+  alive: you paint on them where they hang, nations' borders appear on them by
+  themselves, glow ink shines on them at night, and Foresight carries them back
+  out onto the land so builders can build to the plan.
+- **Vanilla first.** No new items or blocks: vanilla items gain new uses that
+  read the way they already do (a feather writes, a bucket fills, honeycomb
+  seals, a banner claims, a sherd is a symbol, an amethyst shard rings). Every
+  mark costs vanilla resources. Vanilla screens are extended, not replaced, and
+  as much as possible works for players without the mod. Removing the mod
+  leaves every map as it was.
+- **The table is a drafting table.** The cartography table window grows into
+  one: the map large, tools as items on the cursor, the inks you carry in a
+  palette beside it, hints kept out of the drawing. Next it takes **several
+  maps at once**: put the maps of neighboring areas on the table and they tile
+  into one big sheet, to draw a road or a border straight across them, zoomed
+  out to see the whole and in to work on a part. An atlas on the table opens as
+  the book it is, to pick its pages and cut maps back out.
+- **What opens doors:** framed painting for map art and pixel art on walls;
+  sketches in books for builders' notes; glow ink for night maps; banners for
+  politics; sherds for legends; cave maps and the echo for mining expeditions;
+  the spyglass for scouting; Foresight for building to a plan.
+
 ## Next: tools, painting and writing
 
 Planned from playtesting feedback. Each part starts with what was asked and
@@ -629,14 +657,61 @@ takes ink from a hand. Effort: medium.
 2. ~~Labels, pins and borders, unlocked by a loom~~ (built)
 3. ~~Watering down, tints, sherd icons, banner designs, sizes, paper canvases~~
    (built; see [Built: tints and icons](#built-tints-and-icons))
-4. Choosing the page and cutting maps out, with the book on the desk
-5. Atlases shown like maps: held, the open spread's map shows as a held map
+4. **The drafting table:** several maps tiled on the table at once, zoomed
+   out to see the whole and in to work, drawing straight across them
+5. Choosing the page and cutting maps out, with the book on the desk
+6. Atlases shown like maps: held, the open spread's map shows as a held map
    does; in an item frame, the open map shows as a framed map does
-6. Painting framed maps (on by default, open to players without the mod)
-7. One ink file per map
-8. Sketches: in the hand with the quill only; at the table, on the book on the
+7. ~~Painting framed maps~~ (built, on walls)
+8. One ink file per map
+9. Sketches: in the hand with the quill only; at the table, on the book on the
    desk, with all the table's tools. A sketch fills the page's writing area as
    a vanilla book lays it out, so it sits where text would.
+
+### Built: glow, terrain borders, framed painting and the reworked desk
+
+From the second round of playtesting, and where it differs from the plan above:
+
+- **Cave maps draw what you see.** No fixed level: around its holder, a cave map
+  draws each column at their head height (rock in its darkest shade, or the
+  floor below in a shade by its drop) if the holder can see it, by a line of
+  sight from their eyes. The echo still hears through rock, at the ringer's
+  level. Old cave maps work the same way.
+- **The echo** rings with the trident's thunder under the amethyst chime, and
+  sends a ring of sparks (souls for an echo shard).
+- **The spyglass** fills a small patch around each spot it sees, so maps fill
+  in fast, in blobs; zooming plays the spyglass's own extend and fold sounds.
+- **Drawings:** a blank canvas, from an empty map or paper, comes out named
+  "Drawing".
+- **Glow ink is emissive.** Players with the mod see glow ink drawn a second
+  time over framed and held maps at full brightness, so it shines at night.
+  Labels and icons glow when clicked with a glow ink sac in the second slot
+  (paying their cost in glow ink): full brightness, glowing labels outlined in
+  their darker shade as glowing sign text is.
+- **Terrain borders.** A post's reach is spent by the land: open ground costs
+  1 per block, sand 1.2, snow 1.6, forest 1.8, rock 2.4, others 1.4, and slopes
+  (the map's lighter and darker shades) 1.3 times as much. Land a single nation
+  surrounds on every side, not touching the map's edge and no bigger than 4,096
+  pixels, becomes that nation's.
+- **Foresight** is worked out every 4 ticks rather than every frame: one square
+  per block within 32 blocks whose map pixel has ink, at that block's own ground
+  height, lifted 0.07 over it. Labels and pillars as before.
+- **Framed painting** as planned, simplified: a feather or brush in one hand and
+  ink in the other, use a map in a frame on a wall to paint it instead of
+  turning it (`framePainting`). Held use repeats, and dabs within 8 ticks on the
+  same frame are joined into a line; sneaking lays a half coat. Needs build
+  rights and no spawn protection; fixed frames and sealed maps refuse. Not yet:
+  maps on floors and ceilings, the 10-tick lockout of other uses, and the
+  painting-session log line.
+- **The desk:** hints, the label's size and keys, and the ink's strength show
+  under the window, never over the map; a palette column beside the map has a
+  swatch per dye, glow ink and water, faded when you have none, outlined when
+  loaded, and clicking one Shift-moves it into the second slot (and what was
+  there back out) without touching the tool on the cursor; the right button
+  erases with any drawing tool, for free; Shift keeps lines at right angles or
+  diagonal and boxes square, and Shift-clicking with the pen draws on from the
+  last stroke's end; pens scratch, fills splash, water pours and glow ink
+  glimmers. The desk is 8 pixels wider.
 
 ### Built: tints and icons
 

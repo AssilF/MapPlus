@@ -8,7 +8,8 @@ A Fabric mod for Minecraft 26.3 that extends vanilla cartography for planning bu
 With the mod on both sides, the cartography table window gets a drawing desk on its right: the map in the top slot, at full size, to draw on directly.
 
 - **What draws is what's in the second slot:** a dye draws in its color (an ink sac draws black), a glow ink sac makes ink glow, a water bottle erases. One item covers 256 pixels; the bar on the item shows what's left of it.
-- **Blank canvas:** put an empty map or a sheet of paper in the top slot to draw on a blank canvas. The drawing is the result; taking it uses up one empty map or paper. Closing the table gives you the drawing in its place, so nothing you paid ink for is lost.
+- **Blank canvas:** put an empty map or a sheet of paper in the top slot to draw on a blank canvas. The drawing is the result, named "Drawing"; taking it uses up one empty map or paper. Closing the table gives you the drawing in its place, so nothing you paid ink for is lost.
+- **Palette and buttons:** the column beside the map holds a swatch for every ink you carry; click one to load it. The right button erases with any drawing tool. Shift keeps lines straight and boxes square; Shift-click with the feather to carry on in a straight line.
 - **Water the ink down:** scroll over the map with a drawing tool to draw at full, ¾, ½ or ¼ strength: watered ink tints the map instead of covering it, and costs that share of a pixel's ink. Fill a fenced plot at ¼ to tint it as a zone. Watered ink never weakens ink of its own color; a water bottle at a lower strength fades ink a step instead of erasing it. Players without the mod see tints as a fine pattern over the map.
 - **Tools are items:** pick one up and draw on the map with it. The rack under the map picks your tools up from your inventory in one click.
 
@@ -19,11 +20,15 @@ With the mod on both sides, the cartography table window gets a drawing desk on 
   | String | Line: drag from one end to the other |
   | Item frame | Box: drag from corner to corner |
   | Bucket | Fill the area around the click, up to the ink lines around it (dashed borders hold it too) |
+- **Glow ink** makes ink glow; on maps in the world it shines at full brightness, so it stands out at night. Click a label or icon with a glow ink sac in the second slot to make it glow too.
 - **Seal:** honeycomb in the second slot seals a map's ink against drawing and washing; an axe scrapes the seal off (and takes damage). On servers, only whoever sealed the map, the map's maker or an operator can scrape it off (for maps made since MapPlus was installed).
 - Shift-click dyes, ink sacs, water bottles, honeycomb, axes and books into the second slot.
 - Locking a map (glass pane) keeps its ink; zooming it out (paper) shrinks the ink onto the bigger map.
 - Use a map on a water cauldron to water all its ink, labels and icons down a step; four dips wash full ink off.
 - Every copy of a map shows the same ink, including maps in item frames, and players without the mod see it too.
+
+### Painting on the wall
+Hold a feather (or a brush, for a wider pen) in one hand and ink in the other, and use a map in an item frame on a wall: you paint it where it hangs instead of turning it. Hold use to paint strokes; sneak for a lighter coat. Costs ink as at the table, needs build rights, and works for players without the mod too.
 
 ### Planning: labels, pins, icons and borders
 Place a **loom next to the cartography table** to mark maps up for planning: your turf, your city's districts, its roads.
@@ -51,11 +56,11 @@ Removing the mod leaves the atlas as an ordinary book: notes intact, map pages s
 Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too. With the mod, the map shows in the top right corner while you look, and scrolling zooms the spyglass in and out.
 
 ### Nations
-Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post, out to 48 blocks, is the nation's on every map: borders in the nation's color with a light tint inside. Land floods out from the posts, so neighbors meet halfway, and rivers and coasts make natural borders. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
+Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post is the nation's on every map: borders in the nation's color with a light tint inside. Land floods out from the posts, up to 48 blocks across open ground but less through forest, snow and mountains, so borders follow the land; neighbors meet where their reach does, rivers and coasts make natural borders, and land your nation surrounds becomes yours. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
 
 ### Caves and the echo
-- **Cave maps:** use an empty map deep underground and it maps the level you're standing on, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself. It fills in around you while you're on that level, and is named for it.
-- **The echo:** use an amethyst shard with a map in your other hand: it rings, and the land around you fills in at once, even through rock: the caves on a cave map, the surface on any other. An echo shard rings twice as far.
+- **Cave maps:** use an empty map deep underground and you get a Cave Map: it draws what you see around you in the caves, at whatever level you're at, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself.
+- **The echo:** use an amethyst shard with a map in your other hand: it rings out with a peal of thunder, and the land around you fills in at once, even through rock: the caves at your level on a cave map, the surface on any other. An echo shard rings twice as far.
 
 ### Foresight
 A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon. Only you see it; nothing is placed in the world.
@@ -83,8 +88,9 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `postReach` | 48 | How far a border post holds land, in blocks |
 | `nationsOnMaps` | true | Maps show nations' borders and land |
 | `nationMessages` | true | Say "Entering …" in the action bar when crossing a border |
-| `caveMaps` | true | Empty maps used deep underground map that level |
-| `caveMapReach` | 16 | How far around you a held cave map fills in, in blocks |
+| `framePainting` | true | Maps in item frames can be painted where they hang |
+| `caveMaps` | true | Empty maps used deep underground are cave maps |
+| `caveMapReach` | 20 | How far around you a cave map draws what you see, in blocks |
 | `echoReach` | 24 | How far an amethyst shard's ring fills in a map, in blocks (an echo shard: twice) |
 | `echoCooldown` | 40 | Ticks before a shard can ring again |
 | `spyglassSurvey` | true | Spyglass fills held maps |
