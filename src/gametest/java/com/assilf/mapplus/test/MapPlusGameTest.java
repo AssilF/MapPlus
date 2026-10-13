@@ -590,7 +590,8 @@ public class MapPlusGameTest {
 		MapItemSavedData map = level.getMapData(mapId);
 		byte grass = MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL);
 		java.util.Arrays.fill(map.colors, grass);
-		BlockPos at = helper.absolutePos(new BlockPos(1, 1, 1));
+		// In the middle of the map, which vanilla lines up on a grid rather than on the test.
+		BlockPos at = new BlockPos(map.centerX, 1, map.centerZ);
 		int px = MapPixels.pixelX(map, at.getX());
 		int pz = MapPixels.pixelZ(map, at.getZ());
 		// A river two pixels east of the post, running the whole height of the map.
@@ -850,10 +851,10 @@ public class MapPlusGameTest {
 	@GameTest
 	public void bordersShowOnceTheBannerIsOnTheMap(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
-		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
+		MapId mapId = newMap(level, at);
 		MapItemSavedData map = level.getMapData(mapId);
 		java.util.Arrays.fill(map.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
-		BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
 		helper.setBlock(new BlockPos(2, 1, 2), ((BlockItem) Items.BANNER.pick(DyeColor.ORANGE)).getBlock());
 		NationData data = NationData.get(level.getServer());
 		data.put(new Post(level.dimension(), at, DyeColor.ORANGE, List.of(), "Orangeland"));

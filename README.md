@@ -52,11 +52,25 @@ The atlas opens in the vanilla book and quill screen. Each stitched map shows on
 
 Removing the mod leaves the atlas as an ordinary book: notes intact, map pages showing the map's name.
 
+### Sketchbook
+Any book and quill is a sketchbook. Hold it with ink in your other hand and open it: on an empty page, the book's own quill draws.
+
+- A dye or ink sac draws in its color, a glow ink sac makes the ink glow, a water bottle washes it out. Hold Shift for a light coat; right-click erases.
+- A sketch fills the page's writing area, where text would sit. A page is either text or a sketch.
+- Ink is paid for as at the table, from the hand holding it. Free in creative.
+- Sketches show wherever the book does: in hand, signed, on a lectern, and facing a map in an atlas. Up to 16 pages per book.
+
+Players without the mod, and everyone after removal, see an empty page.
+
 ### Spyglass survey
 Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too. With the mod, the map shows in the top right corner while you look, and scrolling zooms the spyglass in and out.
 
 ### Nations
-Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post is the nation's on every map: borders in the nation's color with a light tint inside. Land floods out from the posts, up to 48 blocks across open ground but less through forest, snow and mountains, so borders follow the land; neighbors meet where their reach does, rivers and coasts make natural borders, and land your nation surrounds becomes yours. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
+Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post is the nation's: borders in the nation's color with a light tint inside. Land floods out from the posts, up to 48 blocks across open ground but less through forest, snow and mountains, so borders follow the land; neighbors meet where their reach does, rivers and coasts make natural borders, and land your nation surrounds becomes yours. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
+
+**Walking the bounds.** Banners can be worn on the head, as raid captains wear them. Wear your named banner and walk around the land you want: the banner remembers the trail, which shows dashed in its color on the map in your hand. Come back to where you started, or back into your nation's land, and the bounds are closed. Take the banner off and plant it: the post claims the trail and everything it closes in, whatever the terrain, and the town bell rings. Land another nation already holds is never taken. A banner remembers up to 2,048 blocks of walking; renaming it starts over.
+
+**Maps show the nations they know.** A map doesn't show every nation. Use the map on one of a nation's posts (the vanilla way to mark a banner on a map) or pin its banner at the table, and from then on the map shows that nation's land.
 
 ### Caves and the echo
 - **Cave maps:** use an empty map deep underground and you get a Cave Map: it draws what you see around you in the caves, at whatever level you're at, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself.
@@ -87,8 +101,13 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `nations` | true | Named banners put up in the world are nations' border posts |
 | `postReach` | 48 | How far a border post holds land, in blocks |
 | `nationsOnMaps` | true | Maps show nations' borders and land |
+| `bordersNeedBanners` | true | A map shows a nation only once its banner is marked or pinned on it |
+| `wearableBanners` | true | Banners can be worn on the head |
+| `boundsLength` | 2048 | How far a worn banner remembers the bounds it walks, in blocks (0: off) |
 | `nationMessages` | true | Say "Entering …" in the action bar when crossing a border |
 | `framePainting` | true | Maps in item frames can be painted where they hang |
+| `sketching` | true | Books and quills can be sketched in |
+| `sketchPages` | 16 | Pages of one book that can hold sketches |
 | `caveMaps` | true | Empty maps used deep underground are cave maps |
 | `caveMapReach` | 20 | How far around you a cave map draws what you see, in blocks |
 | `echoReach` | 24 | How far an amethyst shard's ring fills in a map, in blocks (an echo shard: twice) |

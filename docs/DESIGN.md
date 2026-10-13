@@ -200,9 +200,9 @@ hall since 1.4:
 
 - **Maps are a server's shared memory.** Bases, roads, mines, farms, claims and
   plans all end up on maps, and maps end up on walls. MapPlus makes those walls
-  alive: you paint on them where they hang, nations' borders appear on them by
-  themselves, glow ink shines on them at night, and Foresight carries them back
-  out onto the land so builders can build to the plan.
+  alive: you paint on them where they hang, nations' borders appear on them
+  once they know the nation, glow ink shines on them at night, and Foresight
+  carries them back out onto the land so builders can build to the plan.
 - **Vanilla first.** No new items or blocks: vanilla items gain new uses that
   read the way they already do (a feather writes, a bucket fills, honeycomb
   seals, a banner claims, a sherd is a symbol, an amethyst shard rings). Every
@@ -664,9 +664,11 @@ takes ink from a hand. Effort: medium.
    does; in an item frame, the open map shows as a framed map does
 7. ~~Painting framed maps~~ (built, on walls)
 8. One ink file per map
-9. Sketches: in the hand with the quill only; at the table, on the book on the
-   desk, with all the table's tools. A sketch fills the page's writing area as
-   a vanilla book lays it out, so it sits where text would.
+9. Sketches: ~~in the hand with the quill only~~ (built; see
+   [Built: walking the bounds, maps that know nations, and sketchbooks](#built-walking-the-bounds-maps-that-know-nations-and-sketchbooks));
+   at the table, on the book on the desk, with all the table's tools. A sketch
+   fills the page's writing area as a vanilla book lays it out, so it sits
+   where text would.
 
 ### Built: glow, terrain borders, framed painting and the reworked desk
 
@@ -712,6 +714,64 @@ From the second round of playtesting, and where it differs from the plan above:
   diagonal and boxes square, and Shift-clicking with the pen draws on from the
   last stroke's end; pens scratch, fills splash, water pours and glow ink
   glimmers. The desk is 8 pixels wider.
+
+### Built: walking the bounds, maps that know nations, and sketchbooks
+
+From the third round of playtesting: "wear the banner while surveying, and
+when you place it, it claims the portion you annexed"; maps shouldn't mark
+turfs by default; and the sketchbook.
+
+**Walking the bounds** (after the old custom of beating the bounds, when a
+parish walked its boundary every year):
+- Banners can be worn on the head, as raid captains wear them
+  (`wearableBanners`): every banner item gets vanilla's `equippable` component
+  for the head, swappable (use it in the air to put it on) but not dispensed
+  onto entities, so dispensers still drop banners as before. Players without
+  the mod can wear them too; their client just doesn't predict it.
+- A worn named banner remembers its wearer's trail in its `custom_data`
+  (`mapplus:bounds`): a point every 4 blocks walked, up to `boundsLength`
+  blocks (2,048). A jump of more than 96 blocks (a teleport, a portal) breaks
+  the march off, and it starts again there; renaming the banner starts over.
+- The bounds close when the march comes back within 8 blocks of where it
+  began, after at least 32 blocks, or when a march that began in the nation's
+  own land leaves it and comes back in. The cartographer's work sound plays
+  and the action bar says so.
+- While marching with a map in hand (or coming back to the start), the action
+  bar shows the distance walked and the distance back to the start. The trail
+  shows on the wearer's held map as a dashed line in the banner's color, for
+  players without the mod too.
+- Planted, the banner claims its trail, 6 blocks wide, and everything the trail
+  closes in, together with the nation's own land: a flood fill from outside,
+  on 2-by-2-block cells, that the trail and the nation's land stop. Land another
+  nation holds (by claim, or within a post's reach) is never taken and doesn't
+  close anything in. An unclosed march claims only its trail. The town bell
+  rings, and the planter is told how much land was claimed.
+- The claim belongs to the post, kept with it in `nations.dat` as tiles of
+  cells. Take the banner down and its claim goes with it, as its reach does.
+- On maps, walked bounds are held first, oldest post first, whatever the land
+  (water included); then posts' reach floods out as before, crossing its own
+  nation's claims and stopping at anyone else's. "Entering …" counts claims
+  before reach.
+
+**Maps that know nations.** A map shows a nation's land only once the nation's
+banner is on it (`bordersNeedBanners`): marked by using the map on one of the
+nation's posts, which is vanilla's own way of putting a banner on a map, or
+pinned at the table with a banner of the same design. Borders are worked out
+with every nation, then the ones the map doesn't know are left out, so a known
+border still stops where a neighbor's land begins.
+
+**Sketchbooks**, as planned for the hand, with these differences:
+- Any book and quill, not just an atlas. A sketch fills the page's writing
+  area, 114 by 126 points, a pixel per point, where the text box sits.
+- Strokes go to the server as each ends (not on closing), so the ink is paid
+  from the other hand as it's used; the stroke shows at once, until the book
+  in hand comes back with it. The right button erases for free; Shift lays a
+  light coat. The quill's tip shows in the ink it would draw with.
+- Sketches are kept in the atlas data as page and deflated ink. Closing the
+  book keeps sketched pages even when they're the last ones; maps stitched in
+  later go after them. Sketched pages have no text box, show in the book
+  screens, on lecterns and facing a map, and are empty pages for players
+  without the mod.
 
 ### Built: tints and icons
 
@@ -964,8 +1024,10 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - Should seals be owned, so only the sealer, the map's maker or an operator can
   scrape them off? Planned: yes (`sealsAreOwned`), unlike vanilla wax, because a
   copy of a map reaches every other copy and a sign never does.
-- Sketch cap (16 pages per book). Size: decided, the page's own writing area,
-  as a vanilla book lays it out (see Sketches).
+- Sketch cap (16 pages per book, `sketchPages`). Size: decided, the page's own
+  writing area, as a vanilla book lays it out (see Sketches).
+- Should a planted banner's claim outlive the banner, as OpenFront's land does?
+  Built: no, the claim goes with the post, so a flag must stand to hold land.
 
 ## To verify on 26.3
 
