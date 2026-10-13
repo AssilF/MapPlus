@@ -190,7 +190,7 @@ public final class MapPixels {
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, depth, z);
 		BlockState state = chunk.getBlockState(pos);
 		MapColor color = state.getMapColor(level, pos);
-		if (color != MapColor.NONE && state.getFluidState().isEmpty() && state.blocksMotion()) {
+		if (color != MapColor.NONE && state.getFluidState().isEmpty() && !state.getCollisionShape(level, pos).isEmpty()) {
 			return color.getPackedId(MapColor.Brightness.LOWEST) & 0xFF;
 		}
 		int bottom = Math.max(level.getMinY(), depth - CAVE_FLOOR_DEPTH);
