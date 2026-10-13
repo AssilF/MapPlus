@@ -2,6 +2,7 @@ package com.assilf.mapplus;
 
 import com.assilf.mapplus.atlas.AtlasManager;
 import com.assilf.mapplus.ink.CauldronWashing;
+import com.assilf.mapplus.ink.FramePainting;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkSupply;
 import com.assilf.mapplus.ink.MapViewers;
@@ -55,6 +56,7 @@ public class MapPlus implements ModInitializer {
 		SpyglassSurvey.register();
 		Nations.register();
 		CaveMaps.register();
+		FramePainting.register();
 		AtlasManager.register();
 	}
 

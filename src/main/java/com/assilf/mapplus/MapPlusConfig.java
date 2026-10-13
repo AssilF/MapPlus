@@ -54,10 +54,13 @@ public final class MapPlusConfig {
 	/** Whether players are told in the action bar when they cross a border. */
 	public boolean nationMessages = true;
 
-	/** Whether an empty map used underground maps the cave level it's used at. */
+	/** Whether a map in an item frame can be painted where it hangs, with a pen in one hand and ink in the other. */
+	public boolean framePainting = true;
+
+	/** Whether an empty map used underground is a cave map, drawing what its holder sees around them. */
 	public boolean caveMaps = true;
-	/** How far around the player a held cave map fills in, in blocks. */
-	public int caveMapReach = 16;
+	/** How far around its holder a cave map draws what they can see, in blocks. */
+	public int caveMapReach = 20;
 	/** How far an amethyst shard's ring reveals the land on a held map, in blocks; an echo shard's reaches twice as far. */
 	public int echoReach = 24;
 	/** Ticks before a shard can ring again. */

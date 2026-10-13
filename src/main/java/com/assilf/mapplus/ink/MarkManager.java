@@ -178,6 +178,16 @@ public final class MarkManager {
 				layer.putMark(changed);
 				level.playSound(null, player.blockPosition(), SoundEvents.DYE_USE, SoundSource.BLOCKS, 1.0F, 0.8F);
 			}
+			case GLOW -> {
+				Mark mark = layer == null ? null : layer.findMark(payload.markId());
+				if (mark == null || !mark.isInk() || mark.glow() || tool != InkTool.of(mark.kind())
+						|| material == null || material.kind() != InkMaterial.Kind.GLOW || !pay(player, material, materialSlot, mark.cost())) {
+					return false;
+				}
+				changed = mark.glowing();
+				layer.putMark(changed);
+				level.playSound(null, player.blockPosition(), SoundEvents.GLOW_INK_SAC_USE, SoundSource.BLOCKS, 1.0F, 1.0F);
+			}
 			case MOVE, RESIZE, REMOVE -> {
 				Mark mark = layer == null ? null : layer.findMark(payload.markId());
 				// A label moves with a sign, a pin with a banner, an icon with a sherd.
@@ -214,7 +224,8 @@ public final class MarkManager {
 		if (map != null) {
 			InkManager.marksChanged(map);
 		}
-		if (config.logMarks && action != MarkEditPayload.Action.MOVE && action != MarkEditPayload.Action.RESIZE) {
+		if (config.logMarks && action != MarkEditPayload.Action.MOVE && action != MarkEditPayload.Action.RESIZE
+				&& action != MarkEditPayload.Action.GLOW) {
 			MapPlus.LOGGER.info("{} {} {} \"{}\" on map #{}", player.getName().getString(),
 					action == MarkEditPayload.Action.REMOVE ? "removed" : "placed",
 					changed.kind().name().toLowerCase(Locale.ROOT), changed.text(), mapId.id());

@@ -3,6 +3,7 @@ package com.assilf.mapplus.ink;
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.atlas.Atlas;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.LecternMenu;
@@ -47,10 +48,11 @@ public interface DrawingDesk {
 		return stack.is(Items.MAP) || stack.is(Items.PAPER);
 	}
 
-	/** The map item for a canvas: a filled map pointing at it. */
+	/** The item for a blank canvas drawn on: a map of nowhere, so it's called a drawing. */
 	static ItemStack canvasItem(MapId canvas) {
 		ItemStack stack = new ItemStack(Items.FILLED_MAP);
 		stack.set(DataComponents.MAP_ID, canvas);
+		stack.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("mapplus.drawing", "Drawing"));
 		return stack;
 	}
 

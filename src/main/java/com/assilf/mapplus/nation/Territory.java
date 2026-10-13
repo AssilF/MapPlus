@@ -15,8 +15,12 @@ import java.util.PriorityQueue;
 
 /**
  * Which nation holds each pixel of a map. Land floods out from each nation's
- * posts, as far as a post's reach; neighbors meet halfway, and water stops it,
- * so rivers and coasts become borders. Only land the map has explored is held.
+ * posts as far as a post's reach goes, and the land itself decides how far
+ * that is: plains are easy to hold, forests, snow and slopes less so, and
+ * mountains least of all, so borders follow the lie of the land. Neighbors
+ * meet where their reach does, water stops it, so rivers and coasts become
+ * borders, and land a nation surrounds on every side becomes its own. Only
+ * land the map has explored is held.
  */
 public final class Territory {
 	public static final Territory NONE = new Territory(new byte[0], List.of());
@@ -156,8 +160,6 @@ public final class Territory {
 			return NONE;
 		}
 
-		int straight = 10 * scale;
-		int diagonal = 14 * scale;
 		while (!queue.isEmpty()) {
 			long[] next = queue.poll();
 			int index = (int) next[1];
@@ -174,8 +176,12 @@ public final class Territory {
 						continue;
 					}
 					int neighbor = nx + ny * Ink.SIZE;
-					int step = cost[index] + (dx != 0 && dy != 0 ? diagonal : straight);
-					if (step <= limit && step < cost[neighbor] && isLand(map, neighbor)) {
+					if (!isLand(map, neighbor)) {
+						continue;
+					}
+					// A diagonal step goes 1.4 times as far.
+					int step = cost[index] + (dx != 0 && dy != 0 ? 14 : 10) * scale * toll(map, neighbor) / 10;
+					if (step <= limit && step < cost[neighbor]) {
 						cost[neighbor] = step;
 						owners[neighbor] = owners[index];
 						queue.add(new long[] {step, neighbor});
@@ -183,6 +189,7 @@ public final class Territory {
 				}
 			}
 		}
+		surround(map, owners);
 		// Only land the map has explored shows as held.
 		boolean any = false;
 		for (int i = 0; i < Ink.PIXELS; i++) {
@@ -192,6 +199,86 @@ public final class Territory {
 			any |= owners[i] != 0;
 		}
 		return any ? new Territory(owners, List.copyOf(colors)) : NONE;
+	}
+
+	/**
+	 * What crossing a pixel's land costs, in tenths of a block of reach: open
+	 * ground the least, then sand, forest and snow, and rock the most, with
+	 * slopes (a map's lighter and darker shades) costing more again.
+	 */
+	private static int toll(MapItemSavedData map, int index) {
+		int color = map.colors[index] & 0xFF;
+		int base = color >> 2;
+		int toll;
+		if (base == MapColor.GRASS.id || base == MapColor.DIRT.id || base == MapColor.WOOD.id) {
+			toll = 10;
+		} else if (base == MapColor.SAND.id) {
+			toll = 12;
+		} else if (base == MapColor.PLANT.id) {
+			toll = 18;
+		} else if (base == MapColor.SNOW.id || base == MapColor.ICE.id) {
+			toll = 16;
+		} else if (base == MapColor.STONE.id || base == MapColor.DEEPSLATE.id || base == MapColor.TERRACOTTA_WHITE.id) {
+			toll = 24;
+		} else {
+			toll = 14;
+		}
+		int shade = color & 3;
+		return shade == 1 ? toll : toll * 13 / 10;
+	}
+
+	/** The largest stretch of land a nation takes by surrounding it. */
+	private static final int MOST_SURROUNDED = 4096;
+
+	/**
+	 * Gives each stretch of unheld land that one nation surrounds on every side
+	 * to that nation, as long as it doesn't run off the map's edge, where the
+	 * map can't tell what's beyond.
+	 */
+	private static void surround(MapItemSavedData map, byte[] owners) {
+		boolean[] seen = new boolean[Ink.PIXELS];
+		int[] region = new int[Ink.PIXELS];
+		for (int start = 0; start < Ink.PIXELS; start++) {
+			if (seen[start] || owners[start] != 0 || !isLand(map, start)) {
+				continue;
+			}
+			int size = 0;
+			int surrounder = 0;
+			boolean open = false;
+			region[size++] = start;
+			seen[start] = true;
+			for (int i = 0; i < size; i++) {
+				int index = region[i];
+				int x = index % Ink.SIZE;
+				int y = index / Ink.SIZE;
+				if (x == 0 || y == 0 || x == Ink.SIZE - 1 || y == Ink.SIZE - 1) {
+					open = true;
+				}
+				int[] neighbors = {x > 0 ? index - 1 : -1, x < Ink.SIZE - 1 ? index + 1 : -1, y > 0 ? index - Ink.SIZE : -1,
+						y < Ink.SIZE - 1 ? index + Ink.SIZE : -1};
+				for (int neighbor : neighbors) {
+					if (neighbor < 0 || !isLand(map, neighbor)) {
+						continue;
+					}
+					int owner = owners[neighbor] & 0xFF;
+					if (owner != 0) {
+						if (surrounder == 0) {
+							surrounder = owner;
+						} else if (surrounder != owner) {
+							open = true;
+						}
+					} else if (!seen[neighbor]) {
+						seen[neighbor] = true;
+						region[size++] = neighbor;
+					}
+				}
+			}
+			if (!open && surrounder != 0 && size <= MOST_SURROUNDED) {
+				for (int i = 0; i < size; i++) {
+					owners[region[i]] = (byte) surrounder;
+				}
+			}
+		}
 	}
 
 	/** Water stops territory; so does land the map hasn't explored yet, which it can't know about. */

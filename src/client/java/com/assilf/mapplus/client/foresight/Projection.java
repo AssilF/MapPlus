@@ -10,6 +10,7 @@ import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.Mark;
 import com.assilf.mapplus.survey.MapPixels;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
@@ -35,6 +36,7 @@ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,19 +48,35 @@ import java.util.List;
 public final class Projection {
 	public static final ResourceKey<Enchantment> FORESIGHT = ResourceKey.create(Registries.ENCHANTMENT, MapPlus.id("foresight"));
 	/** How far around the wearer the map is projected, in blocks. */
-	private static final int REACH = 40;
+	private static final int REACH = 32;
 	/** How see-through full ink is on the ground; watered down ink is fainter, but never too faint to see. */
-	private static final float GROUND_OPACITY = 0.55F;
+	private static final float GROUND_OPACITY = 0.6F;
 	private static final float FAINTEST_ON_GROUND = 0.45F;
+	/** How high over the ground the projection floats, enough not to flicker against it. */
+	private static final float LIFT = 0.07F;
 	private static final float PILLAR_HEIGHT = 3.0F;
 	private static final float PILLAR_HALF_WIDTH = 0.2F;
 	private static final int FULL_BRIGHT = 0xF000F0;
+	/** How often the projection is worked out again, in ticks; between times the same one is drawn. */
+	private static final int REBUILD_TICKS = 4;
+
+	/** The projection worked out last: a square of ground per inked block, and the marks standing on it. */
+	private record Ground(float[] corners, int[] colors, int count, List<Mark> marks, float[] markPositions, MapItemSavedData map) {
+	}
+
+	private static Ground ground;
+	private static int ticks;
 
 	private Projection() {
 	}
 
 	public static void register() {
 		LevelRenderEvents.BEFORE_TRANSLUCENT_TERRAIN.register(Projection::render);
+		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			if (++ticks % REBUILD_TICKS == 0) {
+				ground = build(client);
+			}
+		});
 	}
 
 	private static boolean wearsForesight(LocalPlayer player) {
@@ -86,85 +104,126 @@ public final class Projection {
 		return null;
 	}
 
-	private static void render(LevelRenderContext context) {
-		Minecraft minecraft = Minecraft.getInstance();
+	/** The top of the ground at a column, or the lowest the world goes where it isn't loaded. */
+	private static int groundAt(ClientLevel level, int x, int z) {
+		return level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
+	}
+
+	/** Works the projection out: every block around the wearer the map has ink over, and the marks in reach. */
+	private static Ground build(Minecraft minecraft) {
 		LocalPlayer player = minecraft.player;
 		ClientLevel level = minecraft.level;
 		if (player == null || level == null || !wearsForesight(player)) {
-			return;
+			return null;
 		}
 		MapId mapId = heldMap(player);
 		MapItemSavedData map = mapId == null ? null : level.getMapData(mapId);
 		if (map == null || !map.dimension.equals(level.dimension())) {
-			return;
+			return null;
 		}
 		byte[] ink = ClientInk.get(mapId.id());
-		List<Mark> marks = ClientMarks.get(mapId);
-		if (ink == null && marks.isEmpty()) {
-			return;
-		}
+		List<Mark> allMarks = ClientMarks.get(mapId);
+		int px0 = player.getBlockX();
+		int pz0 = player.getBlockZ();
 
-		Vec3 camera = context.levelState().cameraRenderState.pos;
-		PoseStack pose = context.poseStack();
-		pose.pushPose();
-		pose.translate(-camera.x, -camera.y, -camera.z);
-
-		int scale = MapPixels.scaleBlocks(map);
-		int minX = Math.max(0, MapPixels.pixelX(map, player.getBlockX() - REACH));
-		int maxX = Math.min(Ink.SIZE - 1, MapPixels.pixelX(map, player.getBlockX() + REACH));
-		int minZ = Math.max(0, MapPixels.pixelZ(map, player.getBlockZ() - REACH));
-		int maxZ = Math.min(Ink.SIZE - 1, MapPixels.pixelZ(map, player.getBlockZ() + REACH));
-		if (ink != null && minX <= maxX && minZ <= maxZ) {
-			context.submitNodeCollector().submitCustomGeometry(pose, RenderTypes.debugQuads(), (at, vertices) -> {
-				for (int pz = minZ; pz <= maxZ; pz++) {
-					for (int px = minX; px <= maxX; px++) {
-						byte pixel = ink[px + pz * Ink.SIZE];
-						if (!Ink.isPresent(pixel)) {
-							continue;
-						}
-						float x0 = MapPixels.worldX(map, px);
-						float z0 = MapPixels.worldZ(map, pz);
-						int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING, (int) x0 + scale / 2, (int) z0 + scale / 2);
-						if (ground <= level.getMinY()) {
-							continue;
-						}
-						float y = ground + 0.03F;
-						int alpha = Math.round(GROUND_OPACITY * Math.max(FAINTEST_ON_GROUND, Ink.opacity(Ink.strength(pixel))) * 255);
-						int color = alpha << 24 | Ink.dye(pixel).getMapColor().calculateARGBColor(Ink.brightness(pixel)) & 0xFFFFFF;
-						vertices.addVertex(at, x0, y, z0).setColor(color);
-						vertices.addVertex(at, x0, y, z0 + scale).setColor(color);
-						vertices.addVertex(at, x0 + scale, y, z0 + scale).setColor(color);
-						vertices.addVertex(at, x0 + scale, y, z0).setColor(color);
+		int capacity = (2 * REACH + 1) * (2 * REACH + 1);
+		float[] corners = new float[ink == null ? 0 : capacity * 3];
+		int[] colors = new int[ink == null ? 0 : capacity];
+		int count = 0;
+		if (ink != null) {
+			for (int z = pz0 - REACH; z <= pz0 + REACH; z++) {
+				for (int x = px0 - REACH; x <= px0 + REACH; x++) {
+					if ((x - px0) * (x - px0) + (z - pz0) * (z - pz0) > REACH * REACH) {
+						continue;
 					}
+					int px = MapPixels.pixelX(map, x);
+					int pz = MapPixels.pixelZ(map, z);
+					if (px < 0 || pz < 0 || px >= Ink.SIZE || pz >= Ink.SIZE) {
+						continue;
+					}
+					byte pixel = ink[px + pz * Ink.SIZE];
+					int top = Ink.isPresent(pixel) ? groundAt(level, x, z) : level.getMinY();
+					if (top <= level.getMinY()) {
+						continue;
+					}
+					int alpha = Math.round(GROUND_OPACITY * Math.max(FAINTEST_ON_GROUND, Ink.opacity(Ink.strength(pixel))) * 255);
+					corners[count * 3] = x;
+					corners[count * 3 + 1] = top + LIFT;
+					corners[count * 3 + 2] = z;
+					colors[count] = alpha << 24 | Ink.dye(pixel).getMapColor().calculateARGBColor(Ink.brightness(pixel)) & 0xFFFFFF;
+					count++;
 				}
-			});
+			}
 		}
 
-		Font font = minecraft.font;
-		for (Mark mark : marks) {
+		List<Mark> marks = new ArrayList<>();
+		float[] positions = new float[allMarks.size() * 3];
+		int scale = MapPixels.scaleBlocks(map);
+		for (Mark mark : allMarks) {
 			float x = MapPixels.worldX(map, mark.x()) + scale / 2.0F;
 			float z = MapPixels.worldZ(map, mark.y()) + scale / 2.0F;
 			if (Math.abs(x - player.getX()) > REACH || Math.abs(z - player.getZ()) > REACH) {
 				continue;
 			}
-			int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING, (int) Math.floor(x), (int) Math.floor(z));
-			if (ground <= level.getMinY()) {
+			int top = groundAt(level, (int) Math.floor(x), (int) Math.floor(z));
+			if (top <= level.getMinY()) {
 				continue;
 			}
+			positions[marks.size() * 3] = x;
+			positions[marks.size() * 3 + 1] = top;
+			positions[marks.size() * 3 + 2] = z;
+			marks.add(mark);
+		}
+		return count == 0 && marks.isEmpty() ? null : new Ground(corners, colors, count, marks, positions, map);
+	}
+
+	private static void render(LevelRenderContext context) {
+		Ground projected = ground;
+		if (projected == null) {
+			return;
+		}
+		Vec3 camera = context.levelState().cameraRenderState.pos;
+		PoseStack pose = context.poseStack();
+		pose.pushPose();
+		pose.translate(-camera.x, -camera.y, -camera.z);
+
+		if (projected.count() > 0) {
+			context.submitNodeCollector().submitCustomGeometry(pose, RenderTypes.debugQuads(), (at, vertices) -> {
+				float[] corners = projected.corners();
+				for (int i = 0; i < projected.count(); i++) {
+					float x = corners[i * 3];
+					float y = corners[i * 3 + 1];
+					float z = corners[i * 3 + 2];
+					int color = projected.colors()[i];
+					vertices.addVertex(at, x, y, z).setColor(color);
+					vertices.addVertex(at, x, y, z + 1).setColor(color);
+					vertices.addVertex(at, x + 1, y, z + 1).setColor(color);
+					vertices.addVertex(at, x + 1, y, z).setColor(color);
+				}
+			});
+		}
+
+		Font font = Minecraft.getInstance().font;
+		int scale = MapPixels.scaleBlocks(projected.map());
+		for (int i = 0; i < projected.marks().size(); i++) {
+			Mark mark = projected.marks().get(i);
+			float x = projected.markPositions()[i * 3];
+			float top = projected.markPositions()[i * 3 + 1];
+			float z = projected.markPositions()[i * 3 + 2];
 			if (mark.isLabel()) {
 				// Written across the ground, north up, as big as it is on the map.
 				FormattedCharSequence text = Component.literal(mark.text()).getVisualOrderText();
 				float size = Labels.fit(mark.text(), mark.size(), mark.x(), mark.y()).scale() * scale;
 				pose.pushPose();
-				pose.translate(x, ground + 0.06F, z);
+				pose.translate(x, top + LIFT * 2, z);
 				pose.mulPose(new Matrix4f().rotationX((float) Math.toRadians(90.0)));
 				pose.scale(size, size, size);
 				context.submitNodeCollector().submitText(pose, -font.width(text) / 2.0F, -4.0F, text, false, Font.DisplayMode.NORMAL, FULL_BRIGHT,
 						MarkRenderer.inkColor(mark), 0, 0);
 				pose.popPose();
 			} else {
-				int color = (mark.kind() == Mark.Kind.PIN ? 0xA0000000 | Labels.color(mark.color()) & 0xFFFFFF : MarkRenderer.inkColor(mark) & 0xFFFFFF | 0xA0000000);
-				pillar(context, pose, x, ground, z, color);
+				int color = (mark.kind() == Mark.Kind.PIN ? Labels.color(mark.color()) : MarkRenderer.inkColor(mark)) & 0xFFFFFF | 0xA0000000;
+				pillar(context, pose, x, top, z, color);
 			}
 		}
 		pose.popPose();

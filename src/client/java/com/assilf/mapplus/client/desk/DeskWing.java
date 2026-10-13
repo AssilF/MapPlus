@@ -6,6 +6,7 @@ import com.assilf.mapplus.client.marks.MarkRenderer;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.ink.Ink;
+import com.assilf.mapplus.ink.InkItems;
 import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.ink.InkTool;
@@ -27,6 +28,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.CartographyTableMenu;
@@ -53,13 +55,16 @@ import java.util.Optional;
 public final class DeskWing {
 	/** The vanilla window is this wide; the wing makes it {@link #WIDTH}. */
 	public static final int VANILLA_WIDTH = 176;
-	public static final int WIDTH = 330;
+	public static final int WIDTH = 338;
 	private static final int HEIGHT = 166;
 
 	private static final int CANVAS_X = 187;
 	private static final int CANVAS_Y = 8;
 	private static final int RACK_X = 179;
 	private static final int RACK_Y = 141;
+	/** The inks the player has, in a column beside the map: click one to put it in the second slot. */
+	private static final int PALETTE_X = 318;
+	private static final int SWATCH = 7;
 	private static final int BUTTON_WIDTH = 16;
 	private static final int BUTTON_HEIGHT = 18;
 	/** Borders are dashes this long, with gaps this long. */
@@ -86,14 +91,38 @@ public final class DeskWing {
 
 	private static final InkTool[] RACK = InkTool.values();
 
+	/** One ink on the palette: what item it is, how it looks there, and what it's called. */
+	private record Swatch(java.util.function.Predicate<ItemStack> item, int color, Component name) {
+	}
+
+	private static final List<Swatch> PALETTE = palette();
+
+	private static List<Swatch> palette() {
+		List<Swatch> swatches = new ArrayList<>();
+		for (DyeColor dye : DyeColor.values()) {
+			swatches.add(new Swatch(stack -> stack.is(InkItems.dyeItem(dye)) || dye == DyeColor.BLACK && stack.is(Items.INK_SAC),
+					dye.getMapColor().calculateARGBColor(net.minecraft.world.level.material.MapColor.Brightness.NORMAL),
+					Component.translatable("color.minecraft." + dye.getName())));
+		}
+		swatches.add(new Swatch(stack -> stack.is(Items.GLOW_INK_SAC), 0xFF7FF5D0, Items.GLOW_INK_SAC.getName(new ItemStack(Items.GLOW_INK_SAC))));
+		swatches.add(new Swatch(InkItems::isWaterBottle, 0xFF3F76E4, Component.translatable("mapplus.desk.palette.water")));
+		return List.copyOf(swatches);
+	}
+
 	private final CartographyTableScreen screen;
 	private final Minecraft minecraft = Minecraft.getInstance();
 	private final MapRenderState mapRenderState = new MapRenderState();
 	private final InkPreview preview = new InkPreview();
 	private int ticks;
 
-	/** The tool of the stroke being drawn, or null. */
+	/** The tool of the stroke being drawn, or null, and whether it's erasing (drawn with the right button). */
 	private InkTool stroke;
+	private boolean erasing;
+	/** Where the last pen stroke ended, for Shift-clicking a straight line on from it. */
+	private int penEndX = -1;
+	private int penEndY = -1;
+	/** Ticks until the pen's scratch is heard again. */
+	private int scratchTicks;
 	private int anchorX;
 	private int anchorY;
 	private int lastX;
@@ -223,6 +252,11 @@ public final class DeskWing {
 		return tool != null && tool.draws() && unlocked(tool) && hasCanvas() && material() != null && !sealed();
 	}
 
+	/** Erasing needs a map with ink to erase, and no ink in hand at all. */
+	private boolean canErase(InkTool tool) {
+		return tool != null && tool.draws() && unlocked(tool) && shownMap() != null && !sealed();
+	}
+
 	private boolean canWrite() {
 		return unlocked(InkTool.LABEL) && hasCanvas() && labelInk() != null && !sealed();
 	}
@@ -305,6 +339,56 @@ public final class DeskWing {
 				graphics.fill(x + 1, y + 1, x + BUTTON_WIDTH - 1, y + BUTTON_HEIGHT - 1, FADED);
 			}
 		}
+
+		// The palette: a swatch per ink, outlined when it's in the second slot, faded when the player has none.
+		InkMaterial loaded = material();
+		ItemStack inSlot = menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem();
+		for (int i = 0; i < PALETTE.size(); i++) {
+			Swatch swatch = PALETTE.get(i);
+			int x = left + PALETTE_X;
+			int y = top + CANVAS_Y + i * SWATCH;
+			boolean current = loaded != null && swatch.item().test(inSlot);
+			graphics.fill(x, y, x + SWATCH - 1, y + SWATCH - 1, current ? SLOT_LIGHT : SLOT_DARK);
+			graphics.fill(x + 1, y + 1, x + SWATCH - 2, y + SWATCH - 2, swatch.color());
+			if (!current && count(swatch) == 0) {
+				graphics.fill(x + 1, y + 1, x + SWATCH - 2, y + SWATCH - 2, FADED);
+			}
+		}
+	}
+
+	/** How many of an ink the player has in the inventory. */
+	private int count(Swatch swatch) {
+		int count = 0;
+		for (Slot slot : menu().slots) {
+			if (slot.container instanceof Inventory && swatch.item().test(slot.getItem())) {
+				count += slot.getItem().getCount();
+			}
+		}
+		return count;
+	}
+
+	/** Puts an ink from the inventory in the second slot, moving what's there back, as Shift-clicking each would. */
+	private void loadInk(Swatch swatch) {
+		ItemStack inSlot = menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem();
+		if (swatch.item().test(inSlot)) {
+			return;
+		}
+		int from = -1;
+		for (Slot slot : menu().slots) {
+			if (slot.container instanceof Inventory && swatch.item().test(slot.getItem())) {
+				from = slot.index;
+				break;
+			}
+		}
+		if (from < 0) {
+			deny();
+			return;
+		}
+		if (!inSlot.isEmpty()) {
+			click(CartographyTableMenu.ADDITIONAL_SLOT, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.QUICK_MOVE);
+		}
+		click(from, InputConstants.MOUSE_BUTTON_LEFT, ContainerInput.QUICK_MOVE);
+		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.DYE_USE, 1.2F, 0.5F));
 	}
 
 	private void extractCanvas(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY) {
@@ -386,20 +470,35 @@ public final class DeskWing {
 			graphics.itemDecorations(minecraft.font, stack, left() + 15, top() + 52, null);
 		}
 
+		// Hints go under the window, never over the map.
+		Component status = null;
 		if (editing != null) {
-			// What the label will look like, and how to size and place it, under the label.
-			List<Component> lines = new ArrayList<>();
-			lines.add(Component.translatable("mapplus.desk.label.size", sizeName(editing.size)));
-			lines.add(Component.translatable("mapplus.desk.label.keys").withStyle(ChatFormatting.GRAY));
-			int below = Math.round(editing.y + 9 * Mark.scale(editing.size) / 2 + 2);
-			graphics.setTooltipForNextFrame(minecraft.font, lines, Optional.empty(), left() + CANVAS_X + editing.x - 12,
-					top() + CANVAS_Y + below);
-		} else if (strengthShown > 0 && overCanvas(mouseX, mouseY) && material() != null) {
-			graphics.setTooltipForNextFrame(minecraft.font, List.of(strengthName(material())), Optional.empty(), mouseX, mouseY);
+			status = Component.translatable("mapplus.desk.label.size", sizeName(editing.size)).append(" · ")
+					.append(Component.translatable("mapplus.desk.label.keys"));
+		} else if (strengthShown > 0 && material() != null) {
+			status = strengthName(material());
 		} else if (overCanvas(mouseX, mouseY) && stroke == null && dragged == null) {
-			Component hint = canvasHint(pixelX(mouseX), pixelY(mouseY));
-			if (hint != null) {
-				graphics.setTooltipForNextFrame(minecraft.font, minecraft.font.split(hint, 170), mouseX, mouseY);
+			status = canvasHint(pixelX(mouseX), pixelY(mouseY));
+		}
+		if (status != null) {
+			List<net.minecraft.util.FormattedCharSequence> lines = minecraft.font.split(status, WIDTH - 12);
+			int y = top() + HEIGHT + 4;
+			if (y + lines.size() * 10 > screen.height) {
+				y = top() - 4 - lines.size() * 10;
+			}
+			for (net.minecraft.util.FormattedCharSequence line : lines) {
+				graphics.text(minecraft.font, line, left() + (WIDTH - minecraft.font.width(line)) / 2, y, 0xFFFFFFFF, true);
+				y += 10;
+			}
+		}
+		for (int i = 0; i < PALETTE.size(); i++) {
+			if (over(mouseX, mouseY, PALETTE_X, CANVAS_Y + i * SWATCH, SWATCH, SWATCH)) {
+				Swatch swatch = PALETTE.get(i);
+				int count = count(swatch);
+				graphics.setTooltipForNextFrame(minecraft.font, List.of(swatch.name(), (count > 0
+						? Component.translatable("mapplus.desk.palette.count", count)
+						: Component.translatable("mapplus.desk.rack.none")).withStyle(count > 0 ? ChatFormatting.GRAY : ChatFormatting.RED)),
+						Optional.empty(), mouseX, mouseY);
 			}
 		}
 		InkTool carried = tool();
@@ -576,8 +675,22 @@ public final class DeskWing {
 		}
 		// A press on the desk keeps its drag and release, even if they end outside the window, so a tool is never thrown.
 		pressButton = button;
+		if (button == InputConstants.MOUSE_BUTTON_RIGHT && editing == null && overCanvas(mouseX, mouseY)) {
+			// The right button erases with any drawing tool, as the other end of a pencil.
+			InkTool tool = tool();
+			if (canErase(tool)) {
+				begin(tool, pixelX(mouseX), pixelY(mouseY), true);
+			}
+			return true;
+		}
 		if (button != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
+		}
+		for (int i = 0; i < PALETTE.size(); i++) {
+			if (over(mouseX, mouseY, PALETTE_X, CANVAS_Y + i * SWATCH, SWATCH, SWATCH)) {
+				loadInk(PALETTE.get(i));
+				return true;
+			}
 		}
 		for (int i = 0; i < RACK.length; i++) {
 			if (over(mouseX, mouseY, rackX(i), RACK_Y, BUTTON_WIDTH, BUTTON_HEIGHT)) {
@@ -607,26 +720,9 @@ public final class DeskWing {
 		int x = pixelX(mouseX);
 		int y = pixelY(mouseY);
 		switch (tool) {
-			case PEN, BRUSH -> {
+			case PEN, BRUSH, LINE, BOX, BORDER, FILL -> {
 				if (canDraw(tool)) {
-					stroke = tool;
-					penStroke.clear();
-					lastX = x;
-					lastY = y;
-					penDab(x, y, x, y);
-				}
-			}
-			case LINE, BOX, BORDER -> {
-				if (canDraw(tool)) {
-					stroke = tool;
-					anchorX = x;
-					anchorY = y;
-					reshape(x, y);
-				}
-			}
-			case FILL -> {
-				if (canDraw(tool)) {
-					fill(x, y);
+					begin(tool, x, y, false);
 				}
 			}
 			case LABEL -> {
@@ -667,6 +763,29 @@ public final class DeskWing {
 			}
 		}
 		return true;
+	}
+
+	/** Starts a stroke with a drawing tool; Shift-clicking with the pen draws a straight line on from where the last one ended. */
+	private void begin(InkTool tool, int x, int y, boolean erase) {
+		erasing = erase;
+		if (tool == InkTool.FILL) {
+			fill(x, y);
+			return;
+		}
+		stroke = tool;
+		if (tool == InkTool.PEN || tool == InkTool.BRUSH) {
+			penStroke.clear();
+			boolean onFrom = minecraft.hasShiftDown() && penEndX >= 0;
+			lastX = onFrom ? penEndX : x;
+			lastY = onFrom ? penEndY : y;
+			penDab(lastX, lastY, x, y);
+			lastX = x;
+			lastY = y;
+		} else {
+			anchorX = x;
+			anchorY = y;
+			reshape(x, y);
+		}
 	}
 
 	public boolean mouseDragged(double mouseX, double mouseY, int button) {
@@ -711,10 +830,12 @@ public final class DeskWing {
 		stroke = null;
 		if (tool == InkTool.PEN || tool == InkTool.BRUSH) {
 			flushPen();
+			penEndX = lastX;
+			penEndY = lastY;
 		} else if (!shape.isEmpty()) {
 			BitSet pixels = (BitSet) shape.clone();
 			shape.clear();
-			send(pixels, true);
+			send(pixels, true, tool);
 		}
 		return true;
 	}
@@ -816,7 +937,10 @@ public final class DeskWing {
 		// Pen strokes go out as they're drawn, a tick's worth at a time.
 		flushPen();
 		preview.acknowledge(DeskState.get().ack());
-		if (stroke != null && !canDraw(stroke)) {
+		if (scratchTicks > 0) {
+			scratchTicks--;
+		}
+		if (stroke != null && !(erasing ? canErase(stroke) : canDraw(stroke))) {
 			stroke = null;
 			shape.clear();
 			penPixels.clear();
@@ -874,23 +998,56 @@ public final class DeskWing {
 			penSeq = DeskState.nextSeq();
 		}
 		penPixels.or(pixels);
-		InkMaterial material = material();
+		InkMaterial material = strokeMaterial();
 		if (material != null) {
-			preview.add(pixels, penSeq, InkPreview.previewColor(material, strength));
+			preview.add(pixels, penSeq, InkPreview.previewColor(material, strokeStrength()));
 		}
+		// The scratch of a pen on paper, now and then while it moves.
+		if (scratchTicks <= 0) {
+			scratchTicks = 4;
+			minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT,
+					0.9F + minecraft.level.getRandom().nextFloat() * 0.4F, 0.25F));
+		}
+	}
+
+	/** What the stroke being drawn lays down: the second slot's ink, or nothing when erasing. */
+	private InkMaterial strokeMaterial() {
+		return erasing ? InkMaterial.WATER : material();
+	}
+
+	private int strokeStrength() {
+		return erasing ? Ink.FULL : strength;
 	}
 
 	private void flushPen() {
 		if (penPixels.isEmpty()) {
 			return;
 		}
-		ClientPlayNetworking.send(new InkStrokePayload(penSeq, target(), false, strength, (BitSet) penPixels.clone()));
+		ClientPlayNetworking.send(new InkStrokePayload(penSeq, target(), false, strokeStrength(), erasing, (BitSet) penPixels.clone()));
 		penPixels.clear();
 		penSeq = 0;
 	}
 
 	private void reshape(int x, int y) {
 		shape.clear();
+		// Shift keeps lines straight, at right angles or diagonal, and boxes square.
+		if (minecraft.hasShiftDown()) {
+			int dx = x - anchorX;
+			int dy = y - anchorY;
+			if (stroke == InkTool.BOX) {
+				int side = Math.max(Math.abs(dx), Math.abs(dy));
+				x = anchorX + (dx < 0 ? -side : side);
+				y = anchorY + (dy < 0 ? -side : side);
+			} else if (Math.abs(dx) > 2 * Math.abs(dy)) {
+				y = anchorY;
+			} else if (Math.abs(dy) > 2 * Math.abs(dx)) {
+				x = anchorX;
+			} else {
+				int side = Math.max(Math.abs(dx), Math.abs(dy));
+				x = anchorX + (dx < 0 ? -side : side);
+				y = anchorY + (dy < 0 ? -side : side);
+			}
+		}
 		switch (stroke) {
 			case LINE -> Strokes.line(shape, anchorX, anchorY, x, y, 1);
 			case BOX -> Strokes.box(shape, Math.min(anchorX, x), Math.min(anchorY, y), Math.max(anchorX, x), Math.max(anchorY, y), 1);
@@ -909,23 +1066,27 @@ public final class DeskWing {
 		}
 		BitSet pixels = new BitSet(Ink.PIXELS);
 		Strokes.fill(pixels, ink, preview.pending(), x, y);
-		send(pixels, true);
+		send(pixels, true, InkTool.FILL);
 	}
 
-	/** Sends a finished stroke and shows it until the server has drawn it. */
-	private void send(BitSet pixels, boolean whole) {
-		InkMaterial material = material();
+	/** Sends a finished stroke and shows it until the server has drawn it, with a sound for what it does. */
+	private void send(BitSet pixels, boolean whole, InkTool tool) {
+		InkMaterial material = strokeMaterial();
 		if (material == null || pixels.isEmpty()) {
 			return;
 		}
-		if (whole && !affordable((pixels.cardinality() * material.quarters(strength) + 3) / 4, material)) {
+		if (whole && !erasing && !affordable((pixels.cardinality() * material.quarters(strength) + 3) / 4, material)) {
 			deny();
 			return;
 		}
 		int seq = DeskState.nextSeq();
-		preview.add(pixels, seq, InkPreview.previewColor(material, strength));
-		ClientPlayNetworking.send(new InkStrokePayload(seq, target(), whole, strength, pixels));
-		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1.2F));
+		preview.add(pixels, seq, InkPreview.previewColor(material, strokeStrength()));
+		ClientPlayNetworking.send(new InkStrokePayload(seq, target(), whole, strokeStrength(), erasing, pixels));
+		SoundEvent sound = erasing || material.kind() == InkMaterial.Kind.WATER ? SoundEvents.BOTTLE_EMPTY
+				: material.kind() == InkMaterial.Kind.GLOW ? SoundEvents.GLOW_INK_SAC_USE
+				: tool == InkTool.FILL ? SoundEvents.BUCKET_EMPTY
+				: SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT;
+		minecraft.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.1F, 0.6F));
 	}
 
 	/** A rough check before sending, so a shape that can't be paid for doesn't flash on the canvas. */
@@ -978,7 +1139,12 @@ public final class DeskWing {
 		Mark mark = dragged;
 		dragged = null;
 		if (!dragMoved) {
-			if (mark.isLabel() && canWrite()) {
+			InkMaterial material = material();
+			if (mark.isInk() && !mark.glow() && material != null && material.kind() == InkMaterial.Kind.GLOW) {
+				// Clicked with glow ink in the second slot: the label or icon glows, as a glowing sign does.
+				ClientMarks.unhide();
+				sendMark(MarkEditPayload.Action.GLOW, mark.id(), mark.x(), mark.y(), mark.size(), "");
+			} else if (mark.isLabel() && canWrite()) {
 				startEditing(new LabelEdit(mark, mark.x(), mark.y(), mark.size(), mark.text()));
 				ClientMarks.hide(shownMap(), mark.id());
 			} else {

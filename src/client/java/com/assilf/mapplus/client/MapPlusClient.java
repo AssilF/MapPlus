@@ -51,9 +51,11 @@ public class MapPlusClient implements ClientModInitializer {
 		Projection.register();
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			ClientMarks.clear();
-			ClientInk.clear();
-			// Made again on the next server, from the resource packs in use then.
-			client.execute(MarkIcons::clear);
+			// Textures are released on the game's own thread; made again on the next server, from the resource packs in use then.
+			client.execute(() -> {
+				ClientInk.clear();
+				MarkIcons.clear();
+			});
 		});
 
 		// The table window widens for the drawing desk before vanilla lays it out.

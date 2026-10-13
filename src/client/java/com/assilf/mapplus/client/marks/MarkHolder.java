@@ -8,5 +8,8 @@ import java.util.List;
 public interface MarkHolder {
 	List<Mark> mapplus$marks();
 
-	void mapplus$setMarks(List<Mark> marks);
+	/** The map drawn, or -1 if it isn't known. */
+	int mapplus$mapId();
+
+	void mapplus$setMarks(int mapId, List<Mark> marks);
 }

@@ -33,6 +33,8 @@ public record MarkEditPayload(int seq, int mapId, Action action, int markId, int
 		MOVE,
 		/** Makes a mark bigger or smaller; growing a label or icon takes more of its ink. */
 		RESIZE,
+		/** Makes a label or icon glow, with the glow ink sac in the second slot. */
+		GLOW,
 		REMOVE
 	}
 

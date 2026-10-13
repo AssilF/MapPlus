@@ -1,9 +1,14 @@
 package com.assilf.mapplus.client.ink;
 
+import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.net.MapInkPayload;
+import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
+import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
@@ -18,6 +23,8 @@ import java.util.Map;
  */
 public final class ClientInk {
 	private static final Map<Integer, byte[]> INK = new HashMap<>();
+	/** For each map with glow ink, a picture of only that ink, drawn at full brightness over the map in the world. */
+	private static final Map<Integer, Identifier> GLOW = new HashMap<>();
 
 	private ClientInk() {
 	}
@@ -35,6 +42,7 @@ public final class ClientInk {
 		} else if (INK.remove(payload.mapId()) == null) {
 			return;
 		}
+		updateGlow(payload.mapId(), any ? payload.ink() : null);
 		// The map's picture is made again with the new ink.
 		Minecraft minecraft = Minecraft.getInstance();
 		MapId mapId = new MapId(payload.mapId());
@@ -42,6 +50,39 @@ public final class ClientInk {
 		if (data != null) {
 			minecraft.getMapTextureManager().update(mapId, data);
 		}
+	}
+
+	private static void updateGlow(int mapId, byte[] ink) {
+		Minecraft minecraft = Minecraft.getInstance();
+		NativeImage image = null;
+		if (ink != null) {
+			for (int i = 0; i < Ink.PIXELS; i++) {
+				if (Ink.isPresent(ink[i]) && Ink.isGlow(ink[i])) {
+					if (image == null) {
+						image = new NativeImage(Ink.SIZE, Ink.SIZE, true);
+					}
+					int color = Ink.dye(ink[i]).getMapColor().calculateARGBColor(MapColor.Brightness.HIGH);
+					int alpha = Math.round(Ink.opacity(Ink.strength(ink[i])) * 255);
+					image.setPixel(i % Ink.SIZE, i / Ink.SIZE, alpha << 24 | color & 0xFFFFFF);
+				}
+			}
+		}
+		Identifier old = GLOW.remove(mapId);
+		if (old != null) {
+			minecraft.getTextureManager().release(old);
+		}
+		if (image != null) {
+			Identifier texture = MapPlus.id("glow/" + mapId);
+			DynamicTexture dynamic = new DynamicTexture(() -> "MapPlus glow ink " + mapId, image);
+			dynamic.upload();
+			minecraft.getTextureManager().register(texture, dynamic);
+			GLOW.put(mapId, texture);
+		}
+	}
+
+	/** The picture of a map's glow ink, or null if it has none. */
+	public static Identifier glowTexture(int mapId) {
+		return GLOW.get(mapId);
 	}
 
 	/** The ink over a map, or null if it has none. */
@@ -67,5 +108,9 @@ public final class ClientInk {
 
 	public static void clear() {
 		INK.clear();
+		for (Identifier texture : GLOW.values()) {
+			Minecraft.getInstance().getTextureManager().release(texture);
+		}
+		GLOW.clear();
 	}
 }

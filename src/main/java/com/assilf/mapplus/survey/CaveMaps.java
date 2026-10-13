@@ -3,7 +3,9 @@ package com.assilf.mapplus.survey;
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.ink.InkData;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -15,26 +17,31 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Maps of the underground, and the echo.
  * <ul>
- * <li>An empty map used deep underground maps the level it's used at instead of
- * the surface: a floor plan of the caves, filled in around whoever holds it
- * while they're on that level.</li>
+ * <li>An empty map used deep underground is a cave map: instead of the surface,
+ * it draws what its holder sees around them in the caves, at whatever level
+ * they're at: the floor they can see, and the rock walls around it.</li>
  * <li>An amethyst shard used with a map in the other hand rings out and sketches
  * the land around onto the map at once, through rock: the surface on a
- * surface map, the caves on a cave map. An echo shard rings twice as far.</li>
+ * surface map, the caves at your level on a cave map. An echo shard rings
+ * twice as far.</li>
  * </ul>
  */
 public final class CaveMaps {
 	/** How much rock and soil must be overhead for a new map to be a cave map. */
 	private static final int COVER = 8;
-	/** How far from its level a cave map's holder can be and still fill it in. */
-	private static final int LEVEL_RANGE = 12;
+	/** Particles in the ring an echo sends out. */
+	private static final int RING_PARTICLES = 48;
 
 	private CaveMaps() {
 	}
@@ -66,42 +73,54 @@ public final class CaveMaps {
 		return player.getBlockY() + COVER < surface;
 	}
 
-	/** Makes a newly made map a cave map of the level its maker stands on, named for it. */
+	/** Makes a newly made map a cave map. */
 	public static void makeCaveMap(ServerLevel level, Player player, ItemStack stack) {
 		MapId mapId = stack.get(DataComponents.MAP_ID);
 		if (mapId == null) {
 			return;
 		}
-		int depth = player.getBlockY();
-		InkData.get(level.getServer()).setDepth(mapId, depth);
-		stack.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("mapplus.map.cave", "Cave Map (Y %s)", depth));
+		InkData.get(level.getServer()).setDepth(mapId, player.getBlockY());
+		stack.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("mapplus.map.cave", "Cave Map"));
+	}
+
+	/** The level a cave map draws around a holder: their head, so walls are what blocks their way. */
+	private static int levelOf(Entity holder) {
+		return holder.getBlockY() + 1;
 	}
 
 	/**
-	 * Fills in a held cave map around its holder, as walking fills in a map of
-	 * the surface, while they're on its level. Returns false for maps of the
+	 * Fills in a held cave map with what its holder can see around them, as
+	 * walking fills in a map of the surface. Returns false for maps of the
 	 * surface, which vanilla fills in.
 	 */
 	public static boolean update(ServerLevel level, Entity holder, MapItemSavedData map, MapId mapId) {
-		Integer depth = mapId == null ? null : InkData.get(level.getServer()).depth(mapId);
-		if (depth == null) {
+		if (mapId == null || InkData.get(level.getServer()).depth(mapId) == null) {
 			return false;
 		}
-		if (!map.dimension.equals(level.dimension()) || Math.abs(holder.getBlockY() - depth) > LEVEL_RANGE) {
+		if (!map.dimension.equals(level.dimension())) {
 			return true;
 		}
 		int s = MapPixels.scaleBlocks(map);
 		int reach = Math.max(1, MapPlusConfig.get().caveMapReach / s);
 		// A quarter of the columns each tick, as vanilla spreads its own updates.
 		int slice = (int) (level.getGameTime() & 3);
-		fill(level, map, depth, MapPixels.pixelX(map, holder.getBlockX()), MapPixels.pixelZ(map, holder.getBlockZ()), reach, slice);
+		fill(level, map, levelOf(holder), MapPixels.pixelX(map, holder.getBlockX()), MapPixels.pixelZ(map, holder.getBlockZ()), reach, slice,
+				holder);
 		return true;
 	}
 
 	/** Rings a shard: fills in the map all around at once, as far as the ring reaches. */
 	public static void ring(ServerLevel level, Player player, ItemStack mapStack, boolean echo) {
-		float pitch = echo ? 0.6F : 1.2F;
-		level.playSound(null, player.blockPosition(), SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.0F, pitch);
+		// A rolling peal of thunder under the chime, and a ring of sparks going out.
+		level.playSound(null, player.blockPosition(), SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, echo ? 0.8F : 0.45F,
+				echo ? 0.7F : 1.4F);
+		level.playSound(null, player.blockPosition(), SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.0F, echo ? 0.6F : 1.2F);
+		double radius = echo ? 3.0 : 2.0;
+		for (int i = 0; i < RING_PARTICLES; i++) {
+			double angle = i * Math.PI * 2 / RING_PARTICLES;
+			level.sendParticles(echo ? ParticleTypes.SCULK_SOUL : ParticleTypes.ELECTRIC_SPARK, player.getX() + Math.cos(angle) * radius,
+					player.getY() + 1.0, player.getZ() + Math.sin(angle) * radius, 1, Math.cos(angle) * 0.2, 0.0, Math.sin(angle) * 0.2, 0.15);
+		}
 		MapId mapId = mapStack.get(DataComponents.MAP_ID);
 		MapItemSavedData map = MapItem.getSavedData(mapStack, level);
 		if (mapId == null || map == null || map.locked || !map.dimension.equals(level.dimension())) {
@@ -112,7 +131,7 @@ public final class CaveMaps {
 		int px = MapPixels.pixelX(map, player.getBlockX());
 		int pz = MapPixels.pixelZ(map, player.getBlockZ());
 		if (depth != null) {
-			fill(level, map, depth, px, pz, reach, -1);
+			fill(level, map, levelOf(player), px, pz, reach, -1, null);
 		} else {
 			MapPixels.ChunkLookup loaded = MapPixels.ChunkLookup.loaded(level);
 			for (int z = Math.max(0, pz - reach); z <= Math.min(127, pz + reach); z++) {
@@ -130,9 +149,15 @@ public final class CaveMaps {
 		}
 	}
 
-	/** Fills a cave map's pixels in a circle; with a slice from 0 to 3, only that quarter of the columns. */
-	private static void fill(ServerLevel level, MapItemSavedData map, int depth, int px, int pz, int reach, int slice) {
+	/**
+	 * Fills a cave map's pixels in a circle; with a slice from 0 to 3, only that
+	 * quarter of the columns. With a viewer, only what they can see from where
+	 * they stand; without one, everything, as an echo hears through rock.
+	 */
+	private static void fill(ServerLevel level, MapItemSavedData map, int depth, int px, int pz, int reach, int slice, Entity viewer) {
 		MapPixels.ChunkLookup loaded = MapPixels.ChunkLookup.loaded(level);
+		int s = MapPixels.scaleBlocks(map);
+		Vec3 eye = viewer == null ? null : viewer.getEyePosition();
 		for (int x = Math.max(0, px - reach); x <= Math.min(127, px + reach); x++) {
 			if (slice >= 0 && (x & 3) != slice) {
 				continue;
@@ -140,6 +165,14 @@ public final class CaveMaps {
 			for (int z = Math.max(0, pz - reach); z <= Math.min(127, pz + reach); z++) {
 				if ((x - px) * (x - px) + (z - pz) * (z - pz) > reach * reach) {
 					continue;
+				}
+				if (eye != null) {
+					BlockPos target = new BlockPos(MapPixels.worldX(map, x) + s / 2, depth, MapPixels.worldZ(map, z) + s / 2);
+					BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(target), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE,
+							viewer));
+					if (hit.getType() != HitResult.Type.MISS && !hit.getBlockPos().equals(target)) {
+						continue;
+					}
 				}
 				int color = MapPixels.caveColor(level, loaded, map, x, z, depth);
 				if (color >= 0) {

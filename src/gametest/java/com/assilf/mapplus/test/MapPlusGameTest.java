@@ -3,6 +3,7 @@ package com.assilf.mapplus.test;
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.ink.DrawingDesk;
+import com.assilf.mapplus.ink.FramePainting;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
@@ -19,6 +20,7 @@ import com.assilf.mapplus.survey.CaveMaps;
 import com.assilf.mapplus.survey.MapPixels;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
@@ -26,6 +28,8 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.Filterable;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
@@ -42,6 +46,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 
 import java.util.BitSet;
@@ -555,6 +560,10 @@ public class MapPlusGameTest {
 		menu.setCarried(sherd);
 		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(5, mapId.id(), MarkEditPayload.Action.RESIZE, icon.id(), 0, 0, Mark.SMALL, "")),
 				Component.literal("icon made smaller, with its sherd"));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.GLOW_INK_SAC, 1));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(6, mapId.id(), MarkEditPayload.Action.GLOW, icon.id(), 0, 0, 0, "")),
+				Component.literal("icon made to glow"));
+		helper.assertTrue(data.find(mapId).findMark(icon.id()).glow(), Component.literal("the icon glows"));
 		helper.succeed();
 	}
 
@@ -610,11 +619,35 @@ public class MapPlusGameTest {
 
 		InkData.get(level.getServer()).setDepth(mapId, depth);
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-		player.setPos(open.getX() + 0.5, open.getY(), open.getZ() + 0.5);
+		// A cave map draws at its holder's head height.
+		player.setPos(open.getX() + 0.5, depth - 1, open.getZ() + 0.5);
 		ItemStack mapStack = mapItem(mapId);
 		CaveMaps.ring(level, player, mapStack, false);
 		helper.assertValueEqual(map.colors[MapPixels.pixelX(map, wall.getX()) + MapPixels.pixelZ(map, wall.getZ()) * Ink.SIZE],
 				MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST), Component.literal("an amethyst shard's ring maps the cave around"));
+		helper.succeed();
+	}
+
+	/** A framed map is painted where it's used, with a pen in one hand and ink in the other, instead of turning. */
+	@GameTest
+	public void framedMapsArePainted(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		ItemFrame frame = new ItemFrame(level, helper.absolutePos(new BlockPos(1, 2, 1)), Direction.NORTH);
+		frame.setItem(mapItem(mapId), false);
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.FEATHER));
+		player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.DYE.pick(DyeColor.BLUE), 4));
+		helper.assertTrue(FramePainting.paints(player, frame, false), Component.literal("a feather and dye paint a framed map"));
+
+		// Seen from in front of a frame facing north, its right is the west; a quarter of a block right and up.
+		FramePainting.paint(level, player, frame, new Vec3(-0.25, 0.25, 0.0));
+		InkLayer layer = InkData.get(level.getServer()).find(mapId);
+		helper.assertTrue(layer != null && Ink.isPresent(layer.get(96 + 32 * Ink.SIZE)), Component.literal("painted where it was used"));
+		helper.assertValueEqual(frame.getRotation(), 0, Component.literal("the map didn't turn"));
+
+		player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+		helper.assertFalse(FramePainting.paints(player, frame, false), Component.literal("ink alone doesn't paint"));
 		helper.succeed();
 	}
 

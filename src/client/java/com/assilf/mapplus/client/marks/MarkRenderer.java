@@ -90,10 +90,17 @@ public final class MarkRenderer {
 		return Mth.clamp(mark.y() + 0.5F, half, Ink.SIZE - half);
 	}
 
-	/** A label's or icon's ink, as see-through as it's watered down. */
+	/** A label's or icon's ink, as see-through as it's watered down; glowing ink in its brightest shade. */
 	public static int inkColor(Mark mark) {
 		int alpha = Math.round(Ink.opacity(mark.fade()) * 255);
-		return alpha << 24 | Labels.color(mark.color()) & 0xFFFFFF;
+		int color = mark.glow()
+				? mark.color().getMapColor().calculateARGBColor(net.minecraft.world.level.material.MapColor.Brightness.HIGH)
+				: Labels.color(mark.color());
+		return alpha << 24 | color & 0xFFFFFF;
+	}
+
+	private static int darker(int color) {
+		return (color >> 16 & 0xFF) * 2 / 5 << 16 | (color >> 8 & 0xFF) * 2 / 5 << 8 | (color & 0xFF) * 2 / 5;
 	}
 
 	private static Identifier picture(Mark mark) {
@@ -168,8 +175,10 @@ public final class MarkRenderer {
 			pose.translate(fit.x(), fit.y(), LABEL_Z);
 			pose.scale(fit.scale(), fit.scale(), -1.0F);
 			pose.translate(0.0F, 0.0F, 0.1F);
+			// Glowing ink is outlined in its own darker shade, as glowing sign text is.
+			int outline = mark.glow() ? 0xFF000000 | darker(inkColor(mark)) : 0;
 			collector.order(1).submitText(pose, -font.width(text) / 2.0F, -4.0F, text, false, Font.DisplayMode.NORMAL, light,
-					inkColor(mark), 0, 0);
+					inkColor(mark), 0, outline);
 			pose.popPose();
 			return;
 		}

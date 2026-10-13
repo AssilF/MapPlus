@@ -28,9 +28,10 @@ import java.util.UUID;
  * @param fade   how watered down a label's or icon's ink is, {@link Ink#FULL} to {@link Ink#FAINTEST}
  * @param symbol an icon's picture: the sherd's pottery pattern texture, as in {@code minecraft:skull_pottery_pattern}
  * @param layers a pin's banner patterns, bottom first
+ * @param glow   whether a label's or icon's ink glows, so it shines out at night
  */
 public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text, int size, Optional<UUID> author,
-		int fade, String symbol, List<Layer> layers) {
+		int fade, String symbol, List<Layer> layers, boolean glow) {
 	public static final int SMALL = 0;
 	public static final int MEDIUM = 1;
 	public static final int LARGE = 2;
@@ -82,7 +83,8 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 			UUIDUtil.CODEC.optionalFieldOf("author").forGetter(Mark::author),
 			Codec.INT.optionalFieldOf("fade", Ink.FULL).forGetter(Mark::fade),
 			Codec.STRING.optionalFieldOf("symbol", "").forGetter(Mark::symbol),
-			Layer.CODEC.listOf().optionalFieldOf("layers", List.of()).forGetter(Mark::layers)
+			Layer.CODEC.listOf().optionalFieldOf("layers", List.of()).forGetter(Mark::layers),
+			Codec.BOOL.optionalFieldOf("glow", false).forGetter(Mark::glow)
 	).apply(instance, Mark::new));
 
 	/** Marks as sent to players: without the author. */
@@ -102,6 +104,7 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 					buf.writeUtf(layer.asset(), MAX_ID_LENGTH);
 					buf.writeByte(layer.color().getId());
 				}
+				buf.writeBoolean(mark.glow);
 			},
 			buf -> {
 				int id = buf.readVarInt();
@@ -122,7 +125,8 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 					String asset = buf.readUtf(MAX_ID_LENGTH);
 					layers.add(new Layer(asset, readDye(buf)));
 				}
-				return new Mark(id, Kind.values()[kind], x, y, color, text, size, Optional.empty(), fade, symbol, layers);
+				boolean glow = buf.readBoolean();
+				return new Mark(id, Kind.values()[kind], x, y, color, text, size, Optional.empty(), fade, symbol, layers, glow);
 			}
 	);
 
@@ -136,7 +140,13 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 
 	/** A label or plain pin: full ink, no picture. */
 	public Mark(int id, Kind kind, int x, int y, DyeColor color, String text, int size, Optional<UUID> author) {
-		this(id, kind, x, y, color, text, size, author, Ink.FULL, "", List.of());
+		this(id, kind, x, y, color, text, size, author, Ink.FULL, "", List.of(), false);
+	}
+
+	/** A mark that doesn't glow. */
+	public Mark(int id, Kind kind, int x, int y, DyeColor color, String text, int size, Optional<UUID> author, int fade, String symbol,
+			List<Layer> layers) {
+		this(id, kind, x, y, color, text, size, author, fade, symbol, layers, false);
 	}
 
 	public Mark {
@@ -208,15 +218,19 @@ public record Mark(int id, Kind kind, int x, int y, DyeColor color, String text,
 	}
 
 	public Mark at(int newX, int newY) {
-		return new Mark(id, kind, newX, newY, color, text, size, author, fade, symbol, layers);
+		return new Mark(id, kind, newX, newY, color, text, size, author, fade, symbol, layers, glow);
 	}
 
 	public Mark withSize(int newSize) {
-		return new Mark(id, kind, x, y, color, text, newSize, author, fade, symbol, layers);
+		return new Mark(id, kind, x, y, color, text, newSize, author, fade, symbol, layers, glow);
 	}
 
 	public Mark withFade(int newFade) {
-		return new Mark(id, kind, x, y, color, text, size, author, newFade, symbol, layers);
+		return new Mark(id, kind, x, y, color, text, size, author, newFade, symbol, layers, glow);
+	}
+
+	public Mark glowing() {
+		return new Mark(id, kind, x, y, color, text, size, author, fade, symbol, layers, true);
 	}
 
 	/**

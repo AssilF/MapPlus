@@ -12,6 +12,8 @@ import java.util.List;
 public abstract class MapRenderStateMixin implements MarkHolder {
 	@Unique
 	private List<Mark> mapplus$marks = List.of();
+	@Unique
+	private int mapplus$mapId = -1;
 
 	@Override
 	public List<Mark> mapplus$marks() {
@@ -19,7 +21,13 @@ public abstract class MapRenderStateMixin implements MarkHolder {
 	}
 
 	@Override
-	public void mapplus$setMarks(List<Mark> marks) {
+	public int mapplus$mapId() {
+		return mapplus$mapId;
+	}
+
+	@Override
+	public void mapplus$setMarks(int mapId, List<Mark> marks) {
+		mapplus$mapId = mapId;
 		mapplus$marks = marks;
 	}
 }
