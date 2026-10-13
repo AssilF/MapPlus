@@ -5,6 +5,7 @@ import com.assilf.mapplus.atlas.Sketch;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.net.SketchPayload;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -105,9 +106,9 @@ public final class SketchPad {
 			return false;
 		}
 		InkMaterial material = ink();
-		if (button == 1 && isSketch(page)) {
+		if (button == InputConstants.MOUSE_BUTTON_RIGHT && isSketch(page)) {
 			erasing = true;
-		} else if (button == 0 && material != null) {
+		} else if (button == InputConstants.MOUSE_BUTTON_LEFT && material != null) {
 			erasing = false;
 		} else {
 			return false;

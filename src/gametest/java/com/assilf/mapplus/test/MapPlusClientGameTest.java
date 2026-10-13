@@ -318,34 +318,8 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.waitTicks(3);
 			context.getInput().pressKey(InputConstants.KEY_PAGEDOWN);
 			context.waitTicks(3);
-			context.runOnClient(client -> {
-				var screen = client.gui.screen();
-				net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.allowMouseClick(screen).register((s, e) -> {
-					System.out.println("MAPPLUS-DEBUG click allowed past the pad at " + e.x() + "," + e.y() + " button " + e.button());
-					return true;
-				});
-				net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.afterMouseClick(screen).register((s, e, handled) -> {
-					System.out.println("MAPPLUS-DEBUG click handled by the screen: " + handled + ", focused " + s.getFocused());
-					return false;
-				});
-				System.out.println("MAPPLUS-DEBUG screen " + screen.getClass().getName() + " pad " + ((SketchBookScreen) screen).mapplus$sketchPad());
-			});
 			// A tower: its walls, its roof, and a door.
 			sketch(context, 40, 110, 40, 40);
-			context.waitTicks(5);
-			String afterInput = sketchState(context, server);
-			boolean direct = context.computeOnClient(client -> {
-				SketchBookScreen book = (SketchBookScreen) client.gui.screen();
-				double x = book.mapplus$writingX() + 20.5;
-				double y = book.mapplus$writingY() + 20.5;
-				boolean down = book.mapplus$sketchPad().mouseClicked(x, y, 0);
-				book.mapplus$sketchPad().mouseDragged(x + 10, y, 0);
-				book.mapplus$sketchPad().mouseReleased(x + 10, y, 0);
-				return down;
-			});
-			context.waitTicks(5);
-			System.out.println("MAPPLUS-DEBUG after input: " + afterInput + "; direct press taken: " + direct + "; after direct: "
-					+ sketchState(context, server));
 			sketch(context, 40, 40, 74, 40);
 			sketch(context, 74, 40, 74, 110);
 			sketch(context, 34, 40, 57, 12);
@@ -376,25 +350,6 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(2);
 		}
-	}
-
-	/** What the open book's sketching shows and what the server has, for working out why a sketch went missing. */
-	private static String sketchState(ClientGameTestContext context, TestServerContext server) {
-		String client = context.computeOnClient(minecraft -> {
-			if (!(minecraft.gui.screen() instanceof SketchBookScreen book)) {
-				return "no book open";
-			}
-			return "page " + book.mapplus$currentPage() + ", sketch shown " + book.mapplus$sketchPad().isSketch(1) + ", writing at "
-					+ book.mapplus$writingX() + "," + book.mapplus$writingY() + ", can send "
-					+ net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(com.assilf.mapplus.net.SketchPayload.TYPE);
-		});
-		String held = server.computeOnServer(minecraft -> {
-			ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
-			ItemStack book = player.getMainHandItem();
-			return book.getItem() + " with " + Atlas.read(book).map(atlas -> atlas.sketches().size() + " sketches").orElse("no atlas data")
-					+ ", other hand " + player.getOffhandItem();
-		});
-		return client + " | server: " + held;
 	}
 
 	/** Presses the open book's Done button, which saves it. */
