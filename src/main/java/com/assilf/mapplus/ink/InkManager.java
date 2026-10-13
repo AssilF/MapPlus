@@ -212,6 +212,14 @@ public final class InkManager {
 		}
 	}
 
+	/** Pixels a stack can still draw, when its top item has {@code charge} left (0 meaning untouched). */
+	public static long available(int items, int charge, int perItem) {
+		if (items <= 0) {
+			return 0;
+		}
+		return (charge > 0 ? charge : perItem) + (long) (items - 1) * perItem;
+	}
+
 	private static boolean isFree(Player player) {
 		return player.isCreative() && MapPlusConfig.get().creativeInkIsFree;
 	}
@@ -276,8 +284,10 @@ public final class InkManager {
 	}
 
 	/**
-	 * Pays for ink from the player's loaded supply, loading one more item from
-	 * the table's second slot whenever it runs out.
+	 * Pays for ink with the items in the table's second slot. The item on top
+	 * stays in the slot until its ink is used up, like a tool wearing down; the
+	 * ink left in it is kept on the player, so taking the stack out and putting
+	 * it back loses nothing.
 	 */
 	private static final class Wallet {
 		private final Player player;
@@ -285,6 +295,7 @@ public final class InkManager {
 		private final Slot source;
 		private final boolean free;
 		private final InkSupply supply;
+		/** Ink left in the top item, or 0 if it hasn't been started. */
 		private int charge;
 
 		Wallet(Player player, InkMaterial material, Slot source) {
@@ -293,7 +304,7 @@ public final class InkManager {
 			this.source = source;
 			this.free = isFree(player);
 			this.supply = player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY);
-			this.charge = material.charge(supply);
+			this.charge = Math.min(material.charge(supply), material.perItem());
 		}
 
 		boolean canAfford(int pixels) {
@@ -302,32 +313,37 @@ public final class InkManager {
 			}
 			ItemStack stack = source.getItem();
 			int items = material.equals(InkMaterial.of(stack)) ? stack.getCount() : 0;
-			return (long) charge + (long) items * material.perItem() >= pixels;
+			return available(items, charge, material.perItem()) >= pixels;
 		}
 
 		boolean spend() {
 			if (free) {
 				return true;
 			}
+			if (!material.equals(InkMaterial.of(source.getItem()))) {
+				return false;
+			}
 			if (charge <= 0) {
-				ItemStack stack = source.getItem();
-				if (!material.equals(InkMaterial.of(stack))) {
-					return false;
-				}
-				source.remove(1);
-				if (material.kind() == InkMaterial.Kind.WATER) {
-					// The emptied bottle takes the water bottle's place, or goes to the player.
-					ItemStack bottle = new ItemStack(Items.GLASS_BOTTLE);
-					if (source.getItem().isEmpty()) {
-						source.set(bottle);
-					} else if (!player.getInventory().add(bottle)) {
-						Block.popResource(player.level(), player.blockPosition(), bottle);
-					}
-				}
-				charge += material.perItem();
+				charge = material.perItem();
 			}
 			charge--;
+			if (charge == 0) {
+				useUpItem();
+			}
 			return true;
+		}
+
+		private void useUpItem() {
+			source.remove(1);
+			if (material.kind() == InkMaterial.Kind.WATER) {
+				// The emptied bottle takes the water bottle's place, or goes to the player.
+				ItemStack bottle = new ItemStack(Items.GLASS_BOTTLE);
+				if (source.getItem().isEmpty()) {
+					source.set(bottle);
+				} else if (!player.getInventory().add(bottle)) {
+					Block.popResource(player.level(), player.blockPosition(), bottle);
+				}
+			}
 		}
 
 		void save() {

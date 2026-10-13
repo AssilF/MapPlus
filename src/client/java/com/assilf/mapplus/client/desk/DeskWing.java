@@ -2,6 +2,7 @@ package com.assilf.mapplus.client.desk;
 
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.Ink;
+import com.assilf.mapplus.ink.InkManager;
 import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
@@ -263,7 +264,7 @@ public final class DeskWing {
 		if (overCanvas(mouseX, mouseY) && !drawing) {
 			Component hint = canvasHint();
 			if (hint != null) {
-				graphics.setTooltipForNextFrame(minecraft.font, hint, mouseX, mouseY);
+				graphics.setTooltipForNextFrame(minecraft.font, minecraft.font.split(hint, 170), mouseX, mouseY);
 			}
 		}
 		DeskTool[] tools = DeskTool.values();
@@ -485,7 +486,7 @@ public final class DeskWing {
 			return true;
 		}
 		ItemStack stack = menu().getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem();
-		return state.charge() + (long) stack.getCount() * state.perItem() >= pixels;
+		return InkManager.available(stack.getCount(), state.charge(), state.perItem()) >= pixels;
 	}
 
 	private int strokeTarget() {

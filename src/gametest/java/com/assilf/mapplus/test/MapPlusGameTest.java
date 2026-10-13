@@ -204,9 +204,9 @@ public class MapPlusGameTest {
 		helper.assertTrue(canvasMap != null && canvasMap.locked, Component.literal("The canvas is a locked map"));
 		InkLayer layer = InkData.get(level.getServer()).find(canvas);
 		helper.assertValueEqual(layer.get(129), Ink.encode(DyeColor.RED, false), Component.literal("drawn pixel"));
-		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().getCount(), 1, Component.literal("dyes after loading one"));
+		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().getCount(), 2, Component.literal("the dye in use stays until it runs out"));
 		helper.assertValueEqual(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY).dye(DyeColor.RED),
-				MapPlusConfig.get().inkPerItem - 4, Component.literal("ink left loaded"));
+				MapPlusConfig.get().inkPerItem - 4, Component.literal("ink left in the dye in use"));
 
 		// A stroke aimed at a map that isn't on the table any more does nothing.
 		InkManager.draw(player, menu, level, new InkStrokePayload(2, canvas.id() + 1000, false, pixels(5)));
@@ -215,7 +215,7 @@ public class MapPlusGameTest {
 		ItemStack taken = menu.getSlot(CartographyTableMenu.RESULT_SLOT).safeTake(1, Integer.MAX_VALUE, player);
 		helper.assertValueEqual(taken.get(DataComponents.MAP_ID), canvas, Component.literal("taken drawing"));
 		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem().getCount(), 2, Component.literal("empty maps after taking"));
-		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().getCount(), 1, Component.literal("dyes after taking"));
+		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().getCount(), 2, Component.literal("dyes after taking"));
 		helper.assertTrue(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().isEmpty(), Component.literal("no second copy of the drawing"));
 		helper.assertTrue(DrawingDesk.of(menu).mapplus$canvas() == null, Component.literal("the next drawing starts fresh"));
 		helper.succeed();
@@ -263,11 +263,12 @@ public class MapPlusGameTest {
 		helper.assertTrue(Ink.isGlow(layer.get(10)), Component.literal("ink glows"));
 		helper.assertFalse(Ink.isPresent(layer.get(12)), Component.literal("glow alone draws nothing"));
 
+		// A bottle with two pixels of water left.
 		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(PotionContents.createItemStack(Items.POTION, Potions.WATER));
-		player.setAttached(InkSupply.ATTACHMENT, InkSupply.EMPTY.withWater(1));
+		player.setAttached(InkSupply.ATTACHMENT, InkSupply.EMPTY.withWater(2));
 		InkManager.draw(player, menu, level, new InkStrokePayload(2, mapId.id(), false, pixels(10, 11)));
-		helper.assertFalse(Ink.isPresent(layer.get(10)), Component.literal("erased with loaded water"));
-		helper.assertFalse(Ink.isPresent(layer.get(11)), Component.literal("erased with a new bottle"));
+		helper.assertFalse(Ink.isPresent(layer.get(10)), Component.literal("first pixel erased"));
+		helper.assertFalse(Ink.isPresent(layer.get(11)), Component.literal("last of the water erased"));
 		helper.assertTrue(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().is(Items.GLASS_BOTTLE), Component.literal("bottle emptied"));
 		helper.succeed();
 	}
