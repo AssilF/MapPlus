@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       inspect:
-        description: 'Space-separated Minecraft classes to print signatures of; Class:regex keeps only matching lines; Class#method prints that method''s bytecode; @regex lists matching jar files (with PNG sizes); %regex prints them as base64'
+        description: 'Space-separated Minecraft or Fabric API classes to print signatures of; Class:regex keeps only matching lines; Class#method prints that method''s bytecode; @regex lists matching jar files (with PNG sizes); %regex prints them as base64'
         required: false
         default: ''
 
@@ -62,7 +62,7 @@ jobs:
         env:
           CLASSES: ${{ inputs.inspect }}
         run: |
-          JARS=$(find ~/.gradle .gradle -name '*.jar' \( -path '*minecraft*' -o -path '*loom*' \) 2>/dev/null | grep -v sources | sort -u)
+          JARS=$(find ~/.gradle .gradle -name '*.jar' \( -path '*minecraft*' -o -path '*loom*' -o -path '*fabric*' \) 2>/dev/null | grep -v sources | sort -u)
           echo "$JARS" | head -40
           CP=$(echo "$JARS" | paste -sd: -)
           for spec in $CLASSES; do
