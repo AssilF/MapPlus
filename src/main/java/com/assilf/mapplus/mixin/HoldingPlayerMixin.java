@@ -12,6 +12,7 @@ import com.assilf.mapplus.nation.Nations;
 import com.assilf.mapplus.survey.MapPixels;
 import com.assilf.mapplus.nation.Territory;
 import com.assilf.mapplus.net.MapInkPayload;
+import com.assilf.mapplus.net.MapPlacePayload;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.protocol.Packet;
@@ -59,6 +60,10 @@ public abstract class HoldingPlayerMixin {
 	private int mapplus$inkSent;
 	@Unique
 	private boolean mapplus$hadInk;
+
+	/** Whether this player has been told where the map lies. */
+	@Unique
+	private boolean mapplus$placeSent;
 
 	/** The territory this player was last sent the whole map for. */
 	@Unique
@@ -119,6 +124,12 @@ public abstract class HoldingPlayerMixin {
 		}
 		InkLayer layer = InkData.get(server).find(mapId);
 		MapItemSavedData map = player.level().getMapData(mapId);
+		boolean modded = player instanceof ServerPlayer serverPlayer && MapPlus.hasMod(serverPlayer);
+		if (modded && map != null && !mapplus$placeSent) {
+			// The game is never told where a map lies; the mod needs it to lay the map over the land.
+			mapplus$placeSent = true;
+			ServerPlayNetworking.send((ServerPlayer) player, new MapPlacePayload(mapId.id(), map.centerX, map.centerZ));
+		}
 		Territory territory = map == null ? Territory.NONE : Nations.territory(server, mapId, map);
 		Marches.Worn worn = map == null ? null : Marches.worn(player);
 		BitSet trail = worn == null ? new BitSet() : worn.bounds().pixels(map);
@@ -126,7 +137,6 @@ public abstract class HoldingPlayerMixin {
 			return packet;
 		}
 
-		boolean modded = player instanceof ServerPlayer serverPlayer && MapPlus.hasMod(serverPlayer);
 		// Sent before the pixels, so the map is blended with the tints that go with them.
 		int inkVersion = 31 * (31 * (layer == null ? 0 : layer.inkVersion()) + territory.version()) + (trail.isEmpty() ? 0 : worn.bounds().version());
 		if (modded && mapplus$inkSent != inkVersion) {

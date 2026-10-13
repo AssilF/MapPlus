@@ -8,6 +8,7 @@ import com.assilf.mapplus.client.marks.Labels;
 import com.assilf.mapplus.client.marks.MarkRenderer;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.Mark;
+import com.assilf.mapplus.net.MapPlacePayload;
 import com.assilf.mapplus.survey.MapPixels;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -43,7 +44,9 @@ import java.util.List;
  * Foresight: wearing a helmet with it, the map in hand is projected onto the
  * land around you, as a ghostly blueprint: its ink laid on the ground, its
  * labels written across it, and a pillar of light at each pin and icon.
- * Nothing is placed in the world; only the wearer sees it.
+ * Nothing is placed in the world; only the wearer sees it, and only with the
+ * mod. Where the map lies comes from the server (see {@link MapPlaces}): the
+ * game's own copy of a map doesn't know.
  */
 public final class Projection {
 	public static final ResourceKey<Enchantment> FORESIGHT = ResourceKey.create(Registries.ENCHANTMENT, MapPlus.id("foresight"));
@@ -59,6 +62,8 @@ public final class Projection {
 	private static final int FULL_BRIGHT = 0xF000F0;
 	/** How often the projection is worked out again, in ticks; between times the same one is drawn. */
 	private static final int REBUILD_TICKS = 4;
+	/** The projection fades out over this many blocks at the edge of its reach. */
+	private static final float FADE = 8.0F;
 
 	/** The projection worked out last: a square of ground per inked block, and the marks standing on it. */
 	private record Ground(float[] corners, int[] colors, int count, List<Mark> marks, float[] markPositions, MapItemSavedData map) {
@@ -118,7 +123,8 @@ public final class Projection {
 		}
 		MapId mapId = heldMap(player);
 		MapItemSavedData map = mapId == null ? null : level.getMapData(mapId);
-		if (map == null || !map.dimension.equals(level.dimension())) {
+		MapPlacePayload place = mapId == null ? null : MapPlaces.get(mapId.id());
+		if (map == null || place == null || !map.dimension.equals(level.dimension())) {
 			return null;
 		}
 		byte[] ink = ClientInk.get(mapId.id());
@@ -133,11 +139,12 @@ public final class Projection {
 		if (ink != null) {
 			for (int z = pz0 - REACH; z <= pz0 + REACH; z++) {
 				for (int x = px0 - REACH; x <= px0 + REACH; x++) {
-					if ((x - px0) * (x - px0) + (z - pz0) * (z - pz0) > REACH * REACH) {
+					int distance2 = (x - px0) * (x - px0) + (z - pz0) * (z - pz0);
+					if (distance2 > REACH * REACH) {
 						continue;
 					}
-					int px = MapPixels.pixelX(map, x);
-					int pz = MapPixels.pixelZ(map, z);
+					int px = MapPlaces.pixelX(place, map, x);
+					int pz = MapPlaces.pixelZ(place, map, z);
 					if (px < 0 || pz < 0 || px >= Ink.SIZE || pz >= Ink.SIZE) {
 						continue;
 					}
@@ -146,7 +153,11 @@ public final class Projection {
 					if (top <= level.getMinY()) {
 						continue;
 					}
-					int alpha = Math.round(GROUND_OPACITY * Math.max(FAINTEST_ON_GROUND, Ink.opacity(Ink.strength(pixel))) * 255);
+					float edge = Math.min(1.0F, (REACH - (float) Math.sqrt(distance2)) / FADE);
+					int alpha = Math.round(GROUND_OPACITY * Math.max(FAINTEST_ON_GROUND, Ink.opacity(Ink.strength(pixel))) * edge * 255);
+					if (alpha <= 0) {
+						continue;
+					}
 					corners[count * 3] = x;
 					corners[count * 3 + 1] = top + LIFT;
 					corners[count * 3 + 2] = z;
@@ -160,8 +171,8 @@ public final class Projection {
 		float[] positions = new float[allMarks.size() * 3];
 		int scale = MapPixels.scaleBlocks(map);
 		for (Mark mark : allMarks) {
-			float x = MapPixels.worldX(map, mark.x()) + scale / 2.0F;
-			float z = MapPixels.worldZ(map, mark.y()) + scale / 2.0F;
+			float x = MapPlaces.worldX(place, map, mark.x()) + scale / 2.0F;
+			float z = MapPlaces.worldZ(place, map, mark.y()) + scale / 2.0F;
 			if (Math.abs(x - player.getX()) > REACH || Math.abs(z - player.getZ()) > REACH) {
 				continue;
 			}
@@ -175,6 +186,12 @@ public final class Projection {
 			marks.add(mark);
 		}
 		return count == 0 && marks.isEmpty() ? null : new Ground(corners, colors, count, marks, positions, map);
+	}
+
+	/** How many squares of ground the projection covers now, for tests. */
+	public static int projectedSquares() {
+		Ground projected = ground;
+		return projected == null ? 0 : projected.count();
 	}
 
 	private static void render(LevelRenderContext context) {

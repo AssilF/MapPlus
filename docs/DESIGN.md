@@ -808,6 +808,14 @@ Also this round:
   hasn't drawn yet, so walking on at another level adds to it rather than
   redrawing it at the new level, as a map of the surface keeps what it has
   explored. The echo fills in only blanks too.
+- **Foresight knows where the map is.** Vanilla never tells the game where a
+  map lies: its copy of a map draws as if centered on the world's middle. So
+  Foresight laid every map there, and showed nothing anywhere else (it seemed
+  to work in flat worlds, which start in the middle). The server now tells
+  players with the mod where each map they're sent lies, once per map, and
+  Foresight lays the map there. It fades out over the last 8 blocks of its
+  reach. Players without the mod don't see Foresight at all; that's settled
+  rather than planned around.
 - **Whole stacks at the rack.** 26.3 numbers the mouse's left button 1, but
   container clicks still count a left click as 0; the rack and palette sent 1,
   a right click, so picking up a stack of string or chain took half of it and

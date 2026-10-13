@@ -84,7 +84,7 @@ Name a banner in an anvil and put it up: it's a border post of your nation. A na
 - **The echo:** use an amethyst shard with a map in your other hand: it rings out with a peal of thunder, and the land around you fills in at once, even through rock: the caves at your level on a cave map (where it's still blank), the surface on any other. An echo shard rings twice as far.
 
 ### Foresight
-A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon. Only you see it; nothing is placed in the world.
+A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon, fading out about 32 blocks away. Only you see it, with the mod; nothing is placed in the world.
 
 ## Installation
 Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client, or both:

@@ -6,6 +6,7 @@ import com.assilf.mapplus.client.atlas.SketchBookScreen;
 import com.assilf.mapplus.client.atlas.SketchPad;
 import com.assilf.mapplus.client.desk.DeskState;
 import com.assilf.mapplus.client.desk.DeskWing;
+import com.assilf.mapplus.client.foresight.MapPlaces;
 import com.assilf.mapplus.client.foresight.Projection;
 import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.client.marks.ClientMarks;
@@ -19,6 +20,7 @@ import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MapMarksPayload;
 import com.assilf.mapplus.net.MapInkPayload;
+import com.assilf.mapplus.net.MapPlacePayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -49,10 +51,12 @@ public class MapPlusClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(InkLayerPayload.TYPE, (payload, context) -> DeskState.accept(payload));
 		ClientPlayNetworking.registerGlobalReceiver(MapMarksPayload.TYPE, (payload, context) -> ClientMarks.accept(payload));
 		ClientPlayNetworking.registerGlobalReceiver(MapInkPayload.TYPE, (payload, context) -> ClientInk.accept(payload));
+		ClientPlayNetworking.registerGlobalReceiver(MapPlacePayload.TYPE, (payload, context) -> MapPlaces.accept(payload));
 		ScopeMap.register();
 		Projection.register();
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			ClientMarks.clear();
+			MapPlaces.clear();
 			// Textures are released on the game's own thread; made again on the next server, from the resource packs in use then.
 			client.execute(() -> {
 				ClientInk.clear();

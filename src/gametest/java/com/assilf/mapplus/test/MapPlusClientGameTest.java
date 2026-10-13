@@ -26,6 +26,8 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import com.assilf.mapplus.survey.MapPixels;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.Filterable;
 import net.minecraft.world.InteractionHand;
@@ -64,6 +66,8 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 	private static final int BANNER = 7;
 	private static final int SHERD = 8;
 	private static final int ZOOM_X = 323;
+	/** Far from the world's middle, where a map's center matters. */
+	private static final int FAR = 1000;
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
@@ -388,6 +392,41 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.takeScreenshot("sketch_reopened");
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(2);
+
+			// Foresight far from the world's middle, where a map's own copy in the game can't tell where it lies: a cross
+			// drawn on a map of the land there is projected around the player.
+			int y = server.computeOnServer(minecraft -> {
+				ServerLevel level = minecraft.overworld();
+				level.getChunk(FAR >> 4, FAR >> 4);
+				return level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, FAR, FAR);
+			});
+			server.runCommand("tp @a " + FAR + ".5 " + y + " " + FAR + ".5 0 60");
+			context.waitTicks(20);
+			world.getConnection().waitForChunksRender();
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				ItemStack far = exploredMap(minecraft);
+				MapItemSavedData data = MapItem.getSavedData(far, player.level());
+				InkLayer layer = InkData.get(minecraft).getOrCreate(far.get(DataComponents.MAP_ID));
+				int px = MapPixels.pixelX(data, player.getBlockX());
+				int pz = MapPixels.pixelZ(data, player.getBlockZ());
+				for (int d = -12; d <= 12; d++) {
+					layer.set(Math.clamp(px + d, 0, Ink.SIZE - 1) + pz * Ink.SIZE, Ink.encode(DyeColor.RED, false, Ink.FULL));
+					layer.set(px + Math.clamp(pz + d, 0, Ink.SIZE - 1) * Ink.SIZE, Ink.encode(DyeColor.BLUE, false, Ink.FULL));
+				}
+				ItemStack helmet = new ItemStack(Items.LEATHER_HELMET);
+				helmet.enchant(minecraft.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Projection.FORESIGHT), 1);
+				player.setItemSlot(EquipmentSlot.HEAD, helmet);
+				player.setItemInHand(InteractionHand.MAIN_HAND, far);
+				player.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
+			});
+			context.waitTicks(20);
+			context.takeScreenshot("foresight_far");
+			int squares = context.computeOnClient(client -> Projection.projectedSquares());
+			if (squares < 20) {
+				throw new AssertionError("Foresight should project the map's cross around the player far from the world's middle, found "
+						+ squares + " squares");
+			}
 		}
 	}
 
