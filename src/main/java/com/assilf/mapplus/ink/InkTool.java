@@ -2,6 +2,7 @@ package com.assilf.mapplus.ink;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -20,7 +21,7 @@ public enum InkTool {
 	FILL("fill", stack -> stack.is(Items.BUCKET), new ItemStack(Items.BUCKET), 1, false),
 	BORDER("border", stack -> stack.is(Items.IRON_CHAIN), new ItemStack(Items.IRON_CHAIN), 1, true),
 	LABEL("label", stack -> stack.is(ItemTags.SIGNS) || stack.is(ItemTags.HANGING_SIGNS), new ItemStack(Items.OAK_SIGN), 1, true),
-	PIN("pin", stack -> stack.is(ItemTags.BANNERS), new ItemStack(Items.WHITE_BANNER), 1, true);
+	PIN("pin", stack -> stack.is(ItemTags.BANNERS), new ItemStack(Items.BANNER.pick(DyeColor.WHITE)), 1, true);
 
 	private final String name;
 	private final Predicate<ItemStack> item;

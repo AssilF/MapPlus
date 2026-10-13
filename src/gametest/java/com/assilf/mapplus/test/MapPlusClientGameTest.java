@@ -63,7 +63,7 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			ItemStack explored = server.computeOnServer(MapPlusClientGameTest::exploredMap);
 			server.runOnServer(minecraft -> {
 				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
-				ItemStack banner = new ItemStack(Items.BLUE_BANNER);
+				ItemStack banner = new ItemStack(Items.BANNER.pick(DyeColor.BLUE));
 				banner.set(DataComponents.CUSTOM_NAME, Component.literal("Town Hall"));
 				for (ItemStack tool : List.of(new ItemStack(Items.FEATHER), new ItemStack(Items.ITEM_FRAME), new ItemStack(Items.BUCKET),
 						new ItemStack(Items.IRON_CHAIN), new ItemStack(Items.OAK_SIGN), banner)) {

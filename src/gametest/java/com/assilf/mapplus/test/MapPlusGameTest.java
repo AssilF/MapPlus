@@ -392,7 +392,7 @@ public class MapPlusGameTest {
 		int afterRewriting = red.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY));
 		helper.assertValueEqual(afterWriting - afterRewriting, Mark.cost("north", Mark.MEDIUM), Component.literal("rewriting pays only for the added letters"));
 
-		ItemStack banner = new ItemStack(Items.BLUE_BANNER);
+		ItemStack banner = new ItemStack(Items.BANNER.pick(DyeColor.BLUE));
 		banner.set(DataComponents.CUSTOM_NAME, Component.literal("Town hall"));
 		menu.setCarried(banner);
 		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(3, mapId.id(), MarkEditPayload.Action.PIN, -1, 64, 64, 0, "")),
