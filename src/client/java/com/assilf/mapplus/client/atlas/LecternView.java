@@ -27,9 +27,9 @@ public final class LecternView {
 	private static final double SLOPE = Math.toRadians(22.5);
 	/** How wide the open book lies across the lectern, in blocks. */
 	private static final float WIDTH = 0.875F;
-	/** The middle of the lectern's top, and how far above it the book lies. */
-	private static final double MIDDLE_Y = 1.0;
-	private static final double ABOVE = 0.02;
+	/** The height of the lectern's sloped top over the middle of the block, and how far above it the book lies. */
+	private static final double MIDDLE_Y = 1.045;
+	private static final double ABOVE = 0.03;
 
 	/** A lectern's book, and the page it's open at. */
 	public record Shown(ItemStack book, int page) {

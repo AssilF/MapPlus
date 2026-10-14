@@ -2,6 +2,7 @@ package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.atlas.Sketch;
+import com.assilf.mapplus.client.atlas.LecternView;
 import com.assilf.mapplus.client.atlas.SketchBookScreen;
 import com.assilf.mapplus.client.foresight.Projection;
 import com.assilf.mapplus.client.scope.FarLand;
@@ -432,6 +433,10 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.getInput().lookAt(180, 40);
 			context.waitTicks(30);
 			context.takeScreenshot("lectern_book");
+			boolean onLectern = context.computeOnClient(client -> LecternView.at(client.player.blockPosition().north(2)) != null);
+			if (!onLectern) {
+				throw new AssertionError("The lectern's book should have been sent to the player");
+			}
 
 			// Foresight far from the world's middle, where a map's own copy in the game can't tell where it lies: a cross
 			// drawn on a map of the land there is projected around the player.
