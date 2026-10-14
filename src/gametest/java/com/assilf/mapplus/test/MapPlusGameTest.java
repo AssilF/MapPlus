@@ -44,6 +44,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CartographyTableMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -780,6 +781,8 @@ public class MapPlusGameTest {
 		List<Filterable<String>> written = List.of(Filterable.passThrough(pages(atlasStack).get(0)),
 				Filterable.passThrough("Village"), Filterable.passThrough("Mine"));
 		atlasStack.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(written));
+		// Closed on the page about the mine, so the next map faces it.
+		Atlas.read(atlasStack).orElseThrow().withSelected(2).write(atlasStack);
 		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(second));
 		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(atlasStack);
 		ItemStack bigger = menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem();
@@ -792,6 +795,75 @@ public class MapPlusGameTest {
 		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(bigger.copy());
 		helper.assertTrue(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().isEmpty(),
 				Component.literal("A map already in the atlas can't be stitched again"));
+		helper.succeed();
+	}
+
+	/** A map stitched into a book goes where the book was left open: facing the notes there, or in a new spread after a map. */
+	@GameTest
+	public void stitchingFollowsTheBookmark(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+		MapId village = newMap(level, origin);
+		MapId mine = newMap(level, origin.offset(512, 0, 0));
+		ItemStack book = new ItemStack(Items.WRITABLE_BOOK);
+		book.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(Filterable.passThrough("About the village"),
+				Filterable.passThrough(""), Filterable.passThrough("About the mine"))));
+		Atlas.EMPTY.withSelected(0).write(book);
+
+		ItemStack first = Atlas.stitch(book, mapItem(village), level.registryAccess());
+		Atlas atlas = Atlas.read(first).orElseThrow();
+		helper.assertValueEqual(atlas.plateAt(1).id(), village, Component.literal("the map faces the notes it was left open at"));
+		helper.assertValueEqual(pages(first).get(2), "About the mine", Component.literal("no other page moves"));
+		helper.assertValueEqual(atlas.selected(), 1, Component.literal("bookmarked at the new map"));
+
+		// Bookmarked at that map, the next one goes in a new spread after it, and the notes after it move on by two.
+		ItemStack second = Atlas.stitch(first, mapItem(mine), level.registryAccess());
+		Atlas both = Atlas.read(second).orElseThrow();
+		helper.assertValueEqual(both.plateAt(2).id(), mine, Component.literal("a new spread after the map"));
+		helper.assertValueEqual(both.plateAt(1).id(), village, Component.literal("the first map stays"));
+		helper.assertValueEqual(pages(second).get(4), "About the mine", Component.literal("later notes move on by a spread"));
+		helper.succeed();
+	}
+
+	/** The table turns the book a map goes into, and shears cut a map back out of an atlas. */
+	@GameTest
+	public void cuttingMapsOut(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+		MapId village = newMap(level, origin);
+		MapId mine = newMap(level, origin.offset(512, 0, 0));
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+
+		// A book written to its fourth page opens there; turned back a spread, the map goes in after the first.
+		ItemStack notes = new ItemStack(Items.WRITABLE_BOOK);
+		notes.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(Filterable.passThrough("One"),
+				Filterable.passThrough("Two"), Filterable.passThrough("Three"), Filterable.passThrough("Four"))));
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(village));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(notes);
+		Atlas atEnd = Atlas.read(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem()).orElseThrow();
+		helper.assertValueEqual(atEnd.plateAt(4).id(), village, Component.literal("after the last spread"));
+		helper.assertTrue(menu.clickMenuButton(player, 1), Component.literal("turned back"));
+		Atlas turned = Atlas.read(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem()).orElseThrow();
+		helper.assertValueEqual(turned.plateAt(2).id(), village, Component.literal("after the first spread, once turned back"));
+
+		// An atlas of two maps, left open at the second, with shears: the second map comes out.
+		ItemStack two = Atlas.stitch(Atlas.stitch(new ItemStack(Items.WRITABLE_BOOK), mapItem(village), level.registryAccess()), mapItem(mine),
+				level.registryAccess());
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(ItemStack.EMPTY);
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(two);
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.SHEARS));
+		Slot result = menu.getSlot(CartographyTableMenu.RESULT_SLOT);
+		helper.assertValueEqual(result.getItem().get(DataComponents.MAP_ID), mine, Component.literal("the map of the bookmarked spread"));
+		ItemStack taken = result.remove(1);
+		result.onTake(player, taken);
+		Atlas left = Atlas.read(menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem()).orElseThrow();
+		helper.assertFalse(left.contains(mine), Component.literal("cut out of the atlas"));
+		helper.assertTrue(left.contains(village), Component.literal("the other map stays"));
+		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().getDamageValue(), 1, Component.literal("the shears wear"));
+		helper.assertTrue(result.getItem().isEmpty(), Component.literal("nothing more until the page turns"));
+		menu.clickMenuButton(player, 1);
+		helper.assertValueEqual(result.getItem().get(DataComponents.MAP_ID), village, Component.literal("turned back, the first map"));
 		helper.succeed();
 	}
 

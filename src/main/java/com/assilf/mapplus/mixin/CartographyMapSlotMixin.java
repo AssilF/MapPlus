@@ -1,6 +1,7 @@
 package com.assilf.mapplus.mixin;
 
 import com.assilf.mapplus.ink.DeskSlot;
+import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.world.item.ItemStack;
@@ -24,6 +25,6 @@ public abstract class CartographyMapSlotMixin implements DeskSlot {
 
 	@ModifyReturnValue(method = "mayPlace", at = @At("RETURN"))
 	private boolean mapplus$acceptCanvas(boolean original, ItemStack stack) {
-		return original || (mapplus$desk != null && mapplus$desk.mapplus$isDesk() && DrawingDesk.isBlankCanvas(stack));
+		return original || (mapplus$desk != null && mapplus$desk.mapplus$isDesk() && (DrawingDesk.isBlankCanvas(stack) || Atlas.canCut(stack)));
 	}
 }

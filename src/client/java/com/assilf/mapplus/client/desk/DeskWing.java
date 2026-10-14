@@ -131,6 +131,7 @@ public final class DeskWing {
 	private final Minecraft minecraft = Minecraft.getInstance();
 	private final MapRenderState mapRenderState = new MapRenderState();
 	private final InkPreview preview = new InkPreview();
+	private final DeskBook book;
 	private int ticks;
 
 	/** The tool of the stroke being drawn, or null, and whether it's erasing (drawn with the right button). */
@@ -214,6 +215,7 @@ public final class DeskWing {
 
 	public DeskWing(CartographyTableScreen screen) {
 		this.screen = screen;
+		this.book = new DeskBook(screen.getMenu());
 		for (int i = 0; i < sheetStates.length; i++) {
 			sheetStates[i] = new MapRenderState();
 		}
@@ -540,6 +542,10 @@ public final class DeskWing {
 		graphics.fill(x - 1, y, x, y + Ink.SIZE, SLOT_DARK);
 		graphics.fill(x, y + Ink.SIZE, x + Ink.SIZE + 1, y + Ink.SIZE + 1, SLOT_LIGHT);
 		graphics.fill(x + Ink.SIZE, y, x + Ink.SIZE + 1, y + Ink.SIZE, SLOT_LIGHT);
+		if (book.shown()) {
+			book.extract(graphics, x, y, mouseX, mouseY);
+			return;
+		}
 		if (!hasCanvas()) {
 			graphics.fill(x, y, x + Ink.SIZE, y + Ink.SIZE, SLOT_INSIDE);
 			return;
@@ -655,6 +661,9 @@ public final class DeskWing {
 
 	/** Drawn over the slots' items: the ink left in the second slot's item, and tooltips. */
 	public void extractForeground(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (book.shown()) {
+			book.tooltip(graphics, left() + CANVAS_X, top() + CANVAS_Y, mouseX, mouseY);
+		}
 		InkMaterial material = material();
 		InkStatePayload state = DeskState.get();
 		if (material != null && !state.free() && state.charge() > 0) {
@@ -896,6 +905,9 @@ public final class DeskWing {
 				commitLabel();
 			}
 			return false;
+		}
+		if (book.shown() && book.mouseClicked(mouseX, mouseY, left() + CANVAS_X, top() + CANVAS_Y)) {
+			return true;
 		}
 		// A press on the desk keeps its drag and release, even if they end outside the window, so a tool is never thrown.
 		pressButton = button;

@@ -83,5 +83,9 @@
 	"mapplus.direction.south": "south",
 	"mapplus.direction.south_west": "south-west",
 	"mapplus.direction.west": "west",
-	"mapplus.direction.north_west": "north-west"
+	"mapplus.direction.north_west": "north-west",
+	"mapplus.desk.book.cut": "Shears cut this map out",
+	"mapplus.desk.book.stitch": "The map goes here",
+	"mapplus.desk.book.sketch": "A sketch",
+	"mapplus.desk.book.empty": "An empty page"
 }

@@ -33,6 +33,12 @@ public interface DrawingDesk {
 	/** Whether a loom stands next to the table. Only known on the server. */
 	boolean mapplus$hasLoom();
 
+	/** Notes that a map was just cut out of the atlas on the table. */
+	void mapplus$cutDone();
+
+	/** The page of the book on the table that a map is stitched at or cut from, or -1 for none. */
+	int mapplus$page();
+
 	static DrawingDesk of(CartographyTableMenu menu) {
 		return (DrawingDesk) menu;
 	}

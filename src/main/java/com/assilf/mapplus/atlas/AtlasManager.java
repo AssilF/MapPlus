@@ -13,6 +13,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.LecternMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
@@ -35,20 +36,19 @@ public final class AtlasManager {
 	}
 
 	/**
-	 * The player closed the atlas on a page. If a map is in that spread, it
-	 * becomes the one that explores; otherwise the atlas stops exploring.
+	 * The player closed a book on a page, which becomes its bookmark: the page it
+	 * opens at on the table, where the next map is stitched in. A held atlas
+	 * explores with the map of that spread, if it has one.
 	 */
 	public static void leftOpenAt(ServerPlayer player, InteractionHand hand, int page) {
 		ItemStack stack = player.getItemInHand(hand);
 		Optional<Atlas> read = Atlas.read(stack);
-		if (read.isEmpty()) {
+		if (read.isEmpty() && !stack.is(Items.WRITABLE_BOOK) || page < 0 || page >= WritableBookContent.MAX_PAGES) {
 			return;
 		}
-		Atlas atlas = read.get();
-		Atlas.Plate plate = page >= 0 ? atlas.mapInSpread(page) : null;
-		int selected = plate == null ? -1 : plate.page();
-		if (selected != atlas.selected()) {
-			atlas.withSelected(selected).write(stack);
+		Atlas atlas = read.orElse(Atlas.EMPTY);
+		if (page != atlas.selected()) {
+			atlas.withSelected(page).write(stack);
 		}
 	}
 

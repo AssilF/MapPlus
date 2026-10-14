@@ -183,8 +183,9 @@ public record Atlas(List<Plate> plates, int selected, List<Sketch> sketches) {
 		return here != null ? here : plateAt(partner(page));
 	}
 
+	/** The map of the spread the book was left open at, which a held atlas explores with. */
 	public Optional<Plate> selectedPlate() {
-		return selected < 0 ? Optional.empty() : Optional.ofNullable(plateAt(selected));
+		return selected < 0 ? Optional.empty() : Optional.ofNullable(mapInSpread(selected));
 	}
 
 	public Atlas withSelected(int page) {
@@ -232,15 +233,63 @@ public record Atlas(List<Plate> plates, int selected, List<Sketch> sketches) {
 		return required;
 	}
 
+	/** Whether a page is empty: no writing, no map and no sketch. */
+	public boolean isEmptyPage(List<Filterable<String>> pages, int page) {
+		return (page >= pages.size() || pages.get(page).raw().isBlank()) && plateAt(page) == null && sketchAt(page) == null;
+	}
+
+	/** The first spread from a page on that holds a map, or the page itself if none does. */
+	public int firstMapSpread(int page) {
+		int found = -1;
+		for (Plate plate : plates) {
+			if (plate.page() >= (page & ~1) && (found < 0 || plate.page() < found)) {
+				found = plate.page();
+			}
+		}
+		if (found < 0) {
+			for (Plate plate : plates) {
+				found = found < 0 ? plate.page() : Math.min(found, plate.page());
+			}
+		}
+		return found < 0 ? Math.max(0, page) : found;
+	}
+
+	/** The pages a book has written, as many as its maps and sketches need. */
+	public static List<Filterable<String>> pages(ItemStack book, Atlas atlas) {
+		WritableBookContent content = book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY);
+		List<Filterable<String>> pages = new ArrayList<>(content.pages());
+		while (pages.size() < atlas.requiredPages()) {
+			pages.add(Filterable.passThrough(""));
+		}
+		return pages;
+	}
+
+	/** Where a book on the table opens for stitching: its bookmark, or its last page. */
+	public static int stitchPage(ItemStack book) {
+		Atlas atlas = read(book).orElse(EMPTY);
+		return atlas.selected() >= 0 ? atlas.selected() : Math.max(0, pages(book, atlas).size() - 1);
+	}
+
+	/** Stitches a map into a book at its bookmark, or at its end. */
+	public static ItemStack stitch(ItemStack book, ItemStack map, HolderLookup.Provider registries) {
+		return stitch(book, map, registries, stitchPage(book));
+	}
+
 	/**
-	 * Stitches a map into a book and quill (or an atlas) as its next page. If the
-	 * book ends on a left page, the map goes on the right, facing it. Otherwise
-	 * the map starts a new spread on the left, with an empty page for notes on
-	 * the right.
+	 * Stitches a map into a book and quill (or an atlas) in the spread of a page,
+	 * so that it faces notes and never another map:
+	 * <ol>
+	 * <li>if the spread already holds a map or a sketch, a new spread goes in after it, the map on its left</li>
+	 * <li>otherwise, if the page is empty, the map goes there</li>
+	 * <li>otherwise, if the facing page is empty, the map goes there, facing the page</li>
+	 * <li>otherwise a new spread goes in after this one</li>
+	 * </ol>
+	 * A new spread moves every later page on by two, so maps keep facing their
+	 * notes. The result is bookmarked at the map.
 	 *
 	 * @return the atlas, or an empty stack if the map can't be stitched in
 	 */
-	public static ItemStack stitch(ItemStack book, ItemStack map, HolderLookup.Provider registries) {
+	public static ItemStack stitch(ItemStack book, ItemStack map, HolderLookup.Provider registries, int page) {
 		MapId mapId = map.get(DataComponents.MAP_ID);
 		if (mapId == null || !map.is(Items.FILLED_MAP) || !book.is(Items.WRITABLE_BOOK)) {
 			return ItemStack.EMPTY;
@@ -249,31 +298,103 @@ public record Atlas(List<Plate> plates, int selected, List<Sketch> sketches) {
 		if (atlas.contains(mapId)) {
 			return ItemStack.EMPTY;
 		}
-
-		WritableBookContent content = book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY);
-		List<Filterable<String>> pages = new ArrayList<>(content.pages());
-		while (pages.size() < atlas.requiredPages()) {
+		List<Filterable<String>> pages = pages(book, atlas);
+		page = Math.max(0, page);
+		int left = page & ~1;
+		List<Plate> plates = new ArrayList<>(atlas.plates());
+		List<Sketch> sketches = new ArrayList<>(atlas.sketches());
+		boolean spreadTaken = atlas.plateAt(left) != null || atlas.plateAt(left + 1) != null || atlas.sketchAt(left) != null
+				|| atlas.sketchAt(left + 1) != null;
+		int mapPage;
+		if (!spreadTaken && atlas.isEmptyPage(pages, page)) {
+			mapPage = page;
+		} else if (!spreadTaken && atlas.isEmptyPage(pages, partner(page))) {
+			mapPage = partner(page);
+		} else {
+			// A new spread after this one: everything after it moves on by two pages.
+			int at = left + 2;
+			mapPage = at;
+			while (pages.size() < at) {
+				pages.add(Filterable.passThrough(""));
+			}
+			pages.add(at, Filterable.passThrough(""));
+			pages.add(at, Filterable.passThrough(""));
+			plates.replaceAll(plate -> plate.page() >= at ? new Plate(plate.mapId(), plate.page() + 2, plate.item()) : plate);
+			sketches.replaceAll(sketch -> sketch.page() >= at ? new Sketch(sketch.page() + 2, sketch.ink()) : sketch);
+		}
+		// The map page's own text is what the page shows without the mod; the facing page is there for notes.
+		while (pages.size() <= (mapPage | 1)) {
 			pages.add(Filterable.passThrough(""));
 		}
-		int mapPage = pages.size();
-		boolean newSpread = mapPage % 2 == 0;
-		if (mapPage + (newSpread ? 2 : 1) > WritableBookContent.MAX_PAGES) {
+		pages.set(mapPage, Filterable.passThrough(map.getHoverName().getString()));
+		if (pages.size() > WritableBookContent.MAX_PAGES) {
 			return ItemStack.EMPTY;
-		}
-		// The map page's own text is what the page shows without the mod.
-		pages.add(Filterable.passThrough(map.getHoverName().getString()));
-		if (newSpread) {
-			pages.add(Filterable.passThrough(""));
 		}
 
 		ItemStack out = book.copyWithCount(1);
-		out.set(DataComponents.WRITABLE_BOOK_CONTENT, content.withReplacedPages(pages));
-		List<Plate> plates = new ArrayList<>(atlas.plates());
+		out.set(DataComponents.WRITABLE_BOOK_CONTENT, content(book).withReplacedPages(pages));
 		plates.add(Plate.bound(map, mapPage, registries));
-		new Atlas(plates, atlas.selected(), atlas.sketches()).write(out);
+		new Atlas(plates, mapPage, sketches).write(out);
 		if (!out.has(DataComponents.CUSTOM_NAME)) {
 			out.set(DataComponents.ITEM_NAME, Component.translatableWithFallback("item.mapplus.atlas", "Atlas"));
 		}
 		return out;
+	}
+
+	private static WritableBookContent content(ItemStack book) {
+		return book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY);
+	}
+
+	/** Whether a stack is an atlas a map can be cut out of: an unsigned book with maps in it. */
+	public static boolean canCut(ItemStack stack) {
+		return stack.is(Items.WRITABLE_BOOK) && read(stack).map(atlas -> !atlas.plates().isEmpty()).orElse(false);
+	}
+
+	/** The map in the spread of a page, as it comes out when cut: as it was stitched. */
+	public static ItemStack cutResult(ItemStack atlasStack, int page, HolderLookup.Provider registries) {
+		if (!canCut(atlasStack)) {
+			return ItemStack.EMPTY;
+		}
+		Plate plate = read(atlasStack).get().mapInSpread(Math.max(0, page) & ~1);
+		return plate == null ? ItemStack.EMPTY : plate.mapStack(registries).copyWithCount(1);
+	}
+
+	/**
+	 * Cuts a map out of an atlas, in place: its page empties (its writing is
+	 * cleared only if it's still the map's name), its notes stay, and no other
+	 * page moves. The atlas is bookmarked on the gap. When the last map comes
+	 * out, the book is a plain book and quill again, with its notes.
+	 *
+	 * @return whether the map was in the atlas and came out
+	 */
+	public static boolean cut(ItemStack atlasStack, MapId mapId, HolderLookup.Provider registries) {
+		if (!canCut(atlasStack)) {
+			return false;
+		}
+		Atlas atlas = read(atlasStack).get();
+		Plate cut = null;
+		List<Plate> plates = new ArrayList<>();
+		for (Plate plate : atlas.plates()) {
+			if (cut == null && plate.mapId() == mapId.id()) {
+				cut = plate;
+			} else {
+				plates.add(plate);
+			}
+		}
+		if (cut == null) {
+			return false;
+		}
+		List<Filterable<String>> pages = pages(atlasStack, atlas);
+		if (cut.page() >= 0 && cut.page() < pages.size()
+				&& pages.get(cut.page()).raw().equals(cut.mapStack(registries).getHoverName().getString())) {
+			pages.set(cut.page(), Filterable.passThrough(""));
+		}
+		atlasStack.set(DataComponents.WRITABLE_BOOK_CONTENT, content(atlasStack).withReplacedPages(pages));
+		Atlas rest = new Atlas(plates, cut.page(), atlas.sketches());
+		if (plates.isEmpty()) {
+			atlasStack.remove(DataComponents.ITEM_NAME);
+		}
+		rest.write(atlasStack);
+		return true;
 	}
 }

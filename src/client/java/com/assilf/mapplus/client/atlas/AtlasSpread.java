@@ -187,6 +187,35 @@ public final class AtlasSpread {
 		}
 	}
 
+	/**
+	 * Draws a book open at the spread of a page, as the book screen lays it out:
+	 * the left page mirrored at {@code left}, the right page beside it.
+	 */
+	public static void drawBook(GuiGraphicsExtractor graphics, ItemStack book, int page, int left, int top) {
+		BookViewScreen.BookAccess access = BookViewScreen.BookAccess.fromItem(book);
+		List<Component> pages = access == null ? List.of() : access.pages();
+		Atlas atlas = Atlas.read(book).orElse(Atlas.EMPTY);
+		int first = Math.max(0, page) & ~1;
+		for (int side = 0; side < 2; side++) {
+			int index = first + side;
+			boolean mirrored = side == 0;
+			int pageLeft = left + (mirrored ? 0 : FACING_OFFSET);
+			drawPage(graphics, BookViewScreen.BOOK_LOCATION, pageLeft, top, mirrored);
+			Atlas.Plate plate = atlas.plateAt(index);
+			if (plate != null) {
+				drawMap(graphics, plate, pageLeft, top, mirrored);
+				continue;
+			}
+			com.assilf.mapplus.atlas.Sketch sketch = atlas.sketchAt(index);
+			if (sketch != null) {
+				drawSketch(graphics, sketch.ink(), pageLeft, top, mirrored);
+			}
+			if (index < pages.size()) {
+				drawText(graphics, pages.get(index), pageLeft, top, mirrored);
+			}
+		}
+	}
+
 	/** A sketch on a page drawn at {@code left, top}, where the page's text would be. */
 	public static void drawSketch(GuiGraphicsExtractor graphics, byte[] sketch, int left, int top, boolean mirrored) {
 		SketchView.draw(graphics, sketch, left + BookViewScreen.PAGE_TEXT_X_OFFSET + (mirrored ? MIRROR_OFFSET : 0),
@@ -194,7 +223,7 @@ public final class AtlasSpread {
 	}
 
 	/** A map pasted onto a page, on its own paper, with its name above it. */
-	private static void drawMap(GuiGraphicsExtractor graphics, Atlas.Plate plate, int left, int top, boolean mirrored) {
+	public static void drawMap(GuiGraphicsExtractor graphics, Atlas.Plate plate, int left, int top, boolean mirrored) {
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft.level == null) {
 			return;
@@ -221,7 +250,7 @@ public final class AtlasSpread {
 		graphics.pose().popMatrix();
 	}
 
-	private static void drawText(GuiGraphicsExtractor graphics, Component page, int left, int top, boolean mirrored) {
+	public static void drawText(GuiGraphicsExtractor graphics, Component page, int left, int top, boolean mirrored) {
 		Font font = Minecraft.getInstance().font;
 		int x = left + 36 + (mirrored ? MIRROR_OFFSET : 0);
 		List<FormattedCharSequence> lines = font.split(page, TEXT_WIDTH);

@@ -276,7 +276,8 @@ public abstract class BookEditScreenMixin extends Screen implements AtlasBookScr
 
 	@Override
 	public InteractionHand mapplus$atlasHand() {
-		return mapplus$atlas == null ? null : hand;
+		// Any book and quill keeps its bookmark, atlas or not.
+		return hand;
 	}
 
 	@Override
