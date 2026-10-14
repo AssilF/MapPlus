@@ -109,6 +109,16 @@ public final class InkManager {
 	static boolean acknowledge(ServerPlayer player, int seq) {
 		Session session = session(player);
 		session.ack = Math.max(session.ack, seq);
+		return allowEdit(player);
+	}
+
+	/**
+	 * Whether a player may make another stroke now, at the table, in a book or
+	 * on a frame: as often as drawing ever needs, but no more, so a client
+	 * can't flood the server with edits.
+	 */
+	public static boolean allowEdit(ServerPlayer player) {
+		Session session = session(player);
 		// Counted in server ticks, which go on even while the game's tick is frozen.
 		session.refill(player.level().getServer().getTickCount());
 		if (session.edits < 1) {

@@ -21,7 +21,10 @@ import java.util.PriorityQueue;
  * meet where their reach does, water stops it, so rivers and coasts become
  * borders, and land a nation surrounds on every side becomes its own. Land a
  * post's banner walked the bounds of is held first, whatever it is, and other
- * posts' reach stops at it. Only land the map has explored is held.
+ * posts' reach stops at it. A nation's separate stretches of land reach out to
+ * join up, over open land as far as a post's reach, so a nation holds one
+ * country rather than a scatter of patches, unless water or a neighbor is in
+ * the way. Only land the map has explored is held.
  */
 public final class Territory {
 	public static final Territory NONE = new Territory(new byte[0], List.of(), List.of());
@@ -239,6 +242,7 @@ public final class Territory {
 				}
 			}
 		}
+		join(map, owners, scale, limit);
 		surround(map, owners);
 		// Only land the map has explored shows as held.
 		boolean any = false;
@@ -290,6 +294,147 @@ public final class Territory {
 		}
 		int shade = color & 3;
 		return shade == 1 ? toll : toll * 13 / 10;
+	}
+
+	/**
+	 * Joins up each nation's separate stretches of land: from the largest, the
+	 * cheapest way over open land to the nearest other stretch, if it's no
+	 * longer than a post's reach, becomes the nation's too, a few pixels wide,
+	 * and so on until no stretch can be reached. Water and other nations' land
+	 * are in the way.
+	 */
+	private static void join(MapItemSavedData map, byte[] owners, int scale, int limit) {
+		int[] part = new int[Ink.PIXELS];
+		List<Integer> partOwners = new ArrayList<>();
+		List<Integer> partSizes = new ArrayList<>();
+		partOwners.add(0);
+		partSizes.add(0);
+		int[] queue = new int[Ink.PIXELS];
+		for (int start = 0; start < Ink.PIXELS; start++) {
+			int owner = owners[start] & 0xFF;
+			if (owner == 0 || part[start] != 0) {
+				continue;
+			}
+			int id = partOwners.size();
+			int size = 0;
+			queue[size++] = start;
+			part[start] = id;
+			for (int i = 0; i < size; i++) {
+				int index = queue[i];
+				int x = index % Ink.SIZE;
+				int y = index / Ink.SIZE;
+				for (int dy = -1; dy <= 1; dy++) {
+					for (int dx = -1; dx <= 1; dx++) {
+						int nx = x + dx;
+						int ny = y + dy;
+						if (nx < 0 || ny < 0 || nx >= Ink.SIZE || ny >= Ink.SIZE) {
+							continue;
+						}
+						int neighbor = nx + ny * Ink.SIZE;
+						if (part[neighbor] == 0 && (owners[neighbor] & 0xFF) == owner) {
+							part[neighbor] = id;
+							queue[size++] = neighbor;
+						}
+					}
+				}
+			}
+			partOwners.add(owner);
+			partSizes.add(size);
+		}
+
+		int[] cost = new int[Ink.PIXELS];
+		int[] from = new int[Ink.PIXELS];
+		for (int nation : new java.util.TreeSet<>(partOwners.subList(1, partOwners.size()))) {
+			int largest = 0;
+			int parts = 0;
+			for (int id = 1; id < partOwners.size(); id++) {
+				if (partOwners.get(id) == nation) {
+					parts++;
+					if (largest == 0 || partSizes.get(id) > partSizes.get(largest)) {
+						largest = id;
+					}
+				}
+			}
+			if (parts < 2) {
+				continue;
+			}
+			boolean[] joined = new boolean[partOwners.size()];
+			joined[largest] = true;
+			while (true) {
+				// The cheapest way out from all the nation's joined land at once.
+				Arrays.fill(cost, Integer.MAX_VALUE);
+				PriorityQueue<long[]> open = new PriorityQueue<>((a, b) -> Long.compare(a[0], b[0]));
+				for (int i = 0; i < Ink.PIXELS; i++) {
+					if ((owners[i] & 0xFF) == nation && (part[i] == 0 || joined[part[i]])) {
+						cost[i] = 0;
+						from[i] = -1;
+						open.add(new long[] {0, i});
+					}
+				}
+				int reached = -1;
+				while (!open.isEmpty() && reached < 0) {
+					long[] next = open.poll();
+					int index = (int) next[1];
+					if (next[0] != cost[index]) {
+						continue;
+					}
+					int x = index % Ink.SIZE;
+					int y = index / Ink.SIZE;
+					for (int dy = -1; dy <= 1 && reached < 0; dy++) {
+						for (int dx = -1; dx <= 1; dx++) {
+							int nx = x + dx;
+							int ny = y + dy;
+							if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= Ink.SIZE || ny >= Ink.SIZE) {
+								continue;
+							}
+							int neighbor = nx + ny * Ink.SIZE;
+							int owner = owners[neighbor] & 0xFF;
+							if (owner == nation && part[neighbor] != 0 && !joined[part[neighbor]]) {
+								// Another stretch of the nation's land: the way there is found.
+								reached = neighbor;
+								from[neighbor] = index;
+								break;
+							}
+							if (owner != 0 || !isLand(map, neighbor)) {
+								continue;
+							}
+							int step = cost[index] + (dx != 0 && dy != 0 ? 14 : 10) * scale * toll(map, neighbor) / 10;
+							if (step <= limit && step < cost[neighbor]) {
+								cost[neighbor] = step;
+								from[neighbor] = index;
+								open.add(new long[] {step, neighbor});
+							}
+						}
+					}
+				}
+				if (reached < 0) {
+					break;
+				}
+				joined[part[reached]] = true;
+				for (int index = from[reached]; index >= 0 && cost[index] > 0; index = from[index]) {
+					widen(map, owners, index, nation);
+				}
+			}
+		}
+	}
+
+	/** Gives a pixel of a joining way to its nation, and the open land right around it, so the way is a few pixels wide. */
+	private static void widen(MapItemSavedData map, byte[] owners, int index, int nation) {
+		int x = index % Ink.SIZE;
+		int y = index / Ink.SIZE;
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				int nx = x + dx;
+				int ny = y + dy;
+				if (nx < 0 || ny < 0 || nx >= Ink.SIZE || ny >= Ink.SIZE) {
+					continue;
+				}
+				int neighbor = nx + ny * Ink.SIZE;
+				if (neighbor == index || owners[neighbor] == 0 && isLand(map, neighbor)) {
+					owners[neighbor] = (byte) nation;
+				}
+			}
+		}
 	}
 
 	/** The largest stretch of land a nation takes by surrounding it. */

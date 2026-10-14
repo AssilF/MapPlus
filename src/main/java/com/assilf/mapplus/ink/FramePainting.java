@@ -2,10 +2,14 @@ package com.assilf.mapplus.ink;
 
 import com.assilf.mapplus.MapPlusConfig;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
+import com.assilf.mapplus.net.FramePaintPayload;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -31,27 +35,54 @@ import java.util.UUID;
 public final class FramePainting {
 	/** Dabs this close together, in ticks, on the same frame are joined into one stroke. */
 	private static final int JOIN_TICKS = 8;
-	/** How often painting is heard, in ticks. */
-	private static final int SOUND_TICKS = 6;
+	/** How often painting is heard, in ticks, after the stroke's first touch. */
+	private static final int SOUND_TICKS = 16;
 
 	private record Dab(int frame, int x, int y, int tick) {
 	}
 
 	private static final Map<UUID, Dab> LAST = new HashMap<>();
 	private static final Map<UUID, Integer> HEARD = new HashMap<>();
+	/** The tick each player last painted from the mod's own message, which comes at most once a tick. */
+	private static final Map<UUID, Integer> SENT = new HashMap<>();
+
+	/** An item frame, as painting needs to know it: whether it's fixed in place. */
+	public interface Frame {
+		boolean mapplus$isFixed();
+	}
 
 	private FramePainting() {
 	}
 
 	public static void register() {
+		ServerPlayNetworking.registerGlobalReceiver(FramePaintPayload.TYPE, (payload, context) -> paintAimed(context.player(), payload));
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
 			LAST.remove(handler.player.getUUID());
 			HEARD.remove(handler.player.getUUID());
+			SENT.remove(handler.player.getUUID());
 		});
 	}
 
+	/**
+	 * Paints where a player with the mod aims at a framed map while holding use,
+	 * once a tick at most, from close enough to touch it.
+	 */
+	public static void paintAimed(ServerPlayer player, FramePaintPayload payload) {
+		int now = player.level().getServer().getTickCount();
+		Integer sent = SENT.put(player.getUUID(), now);
+		if (sent != null && sent == now) {
+			return;
+		}
+		Entity entity = player.level().getEntity(payload.frame());
+		if (!(entity instanceof ItemFrame frame) || !player.isWithinEntityInteractionRange(frame, 1.0)
+				|| !paints(player, frame, ((Frame) frame).mapplus$isFixed())) {
+			return;
+		}
+		paint(player.level(), player, frame, new Vec3(payload.x(), payload.y(), payload.z()));
+	}
+
 	/** The hand holding a pen, if the other holds ink, or null. */
-	private static InteractionHand penHand(Player player) {
+	public static InteractionHand penHand(Player player) {
 		for (InteractionHand hand : InteractionHand.values()) {
 			InkTool tool = InkTool.of(player.getItemInHand(hand));
 			InteractionHand other = hand == InteractionHand.MAIN_HAND ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
@@ -94,10 +125,13 @@ public final class FramePainting {
 		int now = level.getServer().getTickCount();
 		BitSet pixels = new BitSet(Ink.PIXELS);
 		Dab last = LAST.get(player.getUUID());
-		if (last != null && last.frame() == frame.getId() && now - last.tick() <= JOIN_TICKS) {
+		boolean joined = last != null && last.frame() == frame.getId() && now - last.tick() <= JOIN_TICKS;
+		if (joined) {
 			line(pixels, last.x(), last.y(), pixel[0], pixel[1], pen.size());
 		} else {
 			dab(pixels, pixel[0], pixel[1], pen.size());
+			// A new stroke is heard at once.
+			HEARD.remove(player.getUUID());
 		}
 		LAST.put(player.getUUID(), new Dab(frame.getId(), pixel[0], pixel[1], now));
 
@@ -138,8 +172,8 @@ public final class FramePainting {
 			Integer heard = HEARD.get(player.getUUID());
 			if (heard == null || now - heard >= SOUND_TICKS) {
 				HEARD.put(player.getUUID(), now);
-				level.playSound(null, frame.blockPosition(), SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, SoundSource.PLAYERS, 0.4F,
-						0.9F + level.getRandom().nextFloat() * 0.3F);
+				level.playSound(null, frame.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.25F,
+						1.5F + level.getRandom().nextFloat() * 0.3F);
 			}
 		}
 	}

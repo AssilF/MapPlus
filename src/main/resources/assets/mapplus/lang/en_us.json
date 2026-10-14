@@ -66,5 +66,9 @@
 	"mapplus.desk.sheet.keys": "Ctrl and the mouse wheel over the map zoom too",
 	"mapplus.desk.hint.sheet": "Click a map to put it on the table · Pick up a pen, string, frame or chain to draw across them",
 	"mapplus.desk.hint.sheet_empty": "Carry the maps of the land around this one, and they lie around it here",
-	"mapplus.desk.hint.sheet_zoom": "Zoom in to use this on one map"
+	"mapplus.desk.hint.sheet_zoom": "Zoom in to use this on one map",
+	"key.mapplus.foresight": "Foresight view",
+	"mapplus.foresight.full": "Foresight: the whole map",
+	"mapplus.foresight.edges": "Foresight: edges only",
+	"mapplus.foresight.off": "Foresight: off"
 }

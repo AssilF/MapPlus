@@ -612,6 +612,30 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
+	/** Two posts of a nation a little out of each other's reach join up their land, unless water is in the way. */
+	@GameTest
+	public void postsJoinUp(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		java.util.Arrays.fill(map.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		int px = MapPixels.pixelX(map, map.centerX);
+		int pz = MapPixels.pixelZ(map, map.centerZ);
+		// Thirty blocks apart, each reaching twelve: six blocks of open land between them.
+		List<Post> posts = List.of(new Post(level.dimension(), new BlockPos(map.centerX - 15, 1, map.centerZ), DyeColor.RED, List.of(), "Redland"),
+				new Post(level.dimension(), new BlockPos(map.centerX + 15, 1, map.centerZ), DyeColor.RED, List.of(), "Redland"));
+		Territory territory = Territory.of(map, posts, 12);
+		helper.assertValueEqual(territory.owner(px + pz * Ink.SIZE), 1, Component.literal("the land between the posts joins them"));
+
+		// A river between them keeps them apart.
+		for (int z = 0; z < Ink.SIZE; z++) {
+			map.colors[px + z * Ink.SIZE] = MapColor.WATER.getPackedId(MapColor.Brightness.NORMAL);
+		}
+		territory = Territory.of(map, posts, 12);
+		helper.assertValueEqual(territory.owner(px - 1 + pz * Ink.SIZE), 0, Component.literal("water keeps them apart"));
+		helper.succeed();
+	}
+
 	/** A cave map shows rock as its darkest shade and open floor as it is. */
 	@GameTest
 	public void caveMapsShowTheirLevel(GameTestHelper helper) {

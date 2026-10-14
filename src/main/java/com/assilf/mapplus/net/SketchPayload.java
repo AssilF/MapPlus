@@ -23,6 +23,8 @@ import java.util.BitSet;
  */
 public record SketchPayload(boolean offhand, int page, int strength, boolean erase, BitSet pixels) implements CustomPacketPayload {
 	public static final Type<SketchPayload> TYPE = new Type<>(MapPlus.id("sketch"));
+	/** A page's pixels as bits. */
+	private static final int DENSE_BYTES = (Sketch.PIXELS + 7) / 8;
 	public static final StreamCodec<FriendlyByteBuf, SketchPayload> CODEC = StreamCodec.ofMember(SketchPayload::write, SketchPayload::read);
 
 	private static SketchPayload read(FriendlyByteBuf buf) {
@@ -30,13 +32,19 @@ public record SketchPayload(boolean offhand, int page, int strength, boolean era
 		int page = buf.readVarInt();
 		int strength = Ink.clampStrength(buf.readUnsignedByte());
 		boolean erase = buf.readBoolean();
-		int count = buf.readVarInt();
-		if (count < 0 || count > Sketch.PIXELS) {
-			throw new DecoderException("Too many pixels: " + count);
-		}
-		BitSet pixels = new BitSet(Sketch.PIXELS);
-		for (int i = 0; i < count; i++) {
-			pixels.set(buf.readUnsignedShort() % Sketch.PIXELS);
+		BitSet pixels;
+		if (buf.readBoolean()) {
+			// A big stroke, as a wiped page, comes as a bit for every pixel.
+			pixels = BitSet.valueOf(buf.readByteArray(DENSE_BYTES)).get(0, Sketch.PIXELS);
+		} else {
+			int count = buf.readVarInt();
+			if (count < 0 || count > Sketch.PIXELS) {
+				throw new DecoderException("Too many pixels: " + count);
+			}
+			pixels = new BitSet(Sketch.PIXELS);
+			for (int i = 0; i < count; i++) {
+				pixels.set(buf.readUnsignedShort() % Sketch.PIXELS);
+			}
 		}
 		return new SketchPayload(offhand, page, strength, erase, pixels);
 	}
@@ -47,7 +55,14 @@ public record SketchPayload(boolean offhand, int page, int strength, boolean era
 		buf.writeByte(strength);
 		buf.writeBoolean(erase);
 		BitSet clipped = pixels.get(0, Sketch.PIXELS);
-		buf.writeVarInt(clipped.cardinality());
+		int count = clipped.cardinality();
+		boolean dense = count * 2 > DENSE_BYTES;
+		buf.writeBoolean(dense);
+		if (dense) {
+			buf.writeByteArray(clipped.toByteArray());
+			return;
+		}
+		buf.writeVarInt(count);
 		for (int i = clipped.nextSetBit(0); i >= 0; i = clipped.nextSetBit(i + 1)) {
 			buf.writeShort(i);
 		}

@@ -11,6 +11,7 @@ import com.assilf.mapplus.ink.MarkManager;
 import com.assilf.mapplus.nation.Marches;
 import com.assilf.mapplus.nation.Nations;
 import com.assilf.mapplus.net.AtlasPagePayload;
+import com.assilf.mapplus.net.FramePaintPayload;
 import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
@@ -49,6 +50,7 @@ public class MapPlus implements ModInitializer {
 		PayloadTypeRegistry.serverboundPlay().register(AtlasPagePayload.TYPE, AtlasPagePayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(MarkEditPayload.TYPE, MarkEditPayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(SketchPayload.TYPE, SketchPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(FramePaintPayload.TYPE, FramePaintPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkStatePayload.TYPE, InkStatePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(MapMarksPayload.TYPE, MapMarksPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(InkLayerPayload.TYPE, InkLayerPayload.CODEC);

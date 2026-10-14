@@ -2,11 +2,13 @@ package com.assilf.mapplus.survey;
 
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.ink.InkData;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -24,6 +26,10 @@ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * Maps of the underground, and the echo.
@@ -46,10 +52,20 @@ public final class CaveMaps {
 	/** Particles in the ring an echo sends out. */
 	private static final int RING_PARTICLES = 48;
 
+	/** An echo of a ring still to be heard: where, when, how loud and how high. */
+	private record Echo(ServerLevel level, Vec3 at, int tick, float volume, float pitch, double radius, boolean deep) {
+	}
+
+	private static final List<Echo> ECHOES = new ArrayList<>();
+	/** When the ring's echoes come back, in ticks after it, and how high each answers. */
+	private static final int[] ECHO_TICKS = {3, 7, 12, 18, 25};
+	private static final float[] ECHO_PITCHES = {1.5F, 1.26F, 1.68F, 1.12F, 1.33F};
+
 	private CaveMaps() {
 	}
 
 	public static void register() {
+		ServerTickEvents.END_SERVER_TICK.register(CaveMaps::echoes);
 		UseItemCallback.EVENT.register((player, level, hand) -> {
 			ItemStack shard = player.getItemInHand(hand);
 			if (!(shard.is(Items.AMETHYST_SHARD) || shard.is(Items.ECHO_SHARD)) || player.isSpectator()) {
@@ -114,16 +130,26 @@ public final class CaveMaps {
 
 	/** Rings a shard: fills in the map all around at once, as far as the ring reaches. */
 	public static void ring(ServerLevel level, Player player, ItemStack mapStack, boolean echo) {
-		// A rolling peal of thunder under the chime, and a ring of sparks going out.
-		level.playSound(null, player.blockPosition(), SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, echo ? 0.8F : 0.45F,
-				echo ? 0.7F : 1.4F);
-		level.playSound(null, player.blockPosition(), SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.0F, echo ? 0.6F : 1.2F);
-		double radius = echo ? 3.0 : 2.0;
-		for (int i = 0; i < RING_PARTICLES; i++) {
-			double angle = i * Math.PI * 2 / RING_PARTICLES;
-			level.sendParticles(echo ? ParticleTypes.SCULK_SOUL : ParticleTypes.ELECTRIC_SPARK, player.getX() + Math.cos(angle) * radius,
-					player.getY() + 1.0, player.getZ() + Math.sin(angle) * radius, 1, Math.cos(angle) * 0.2, 0.0, Math.sin(angle) * 0.2, 0.15);
+		// The shard rings: a chord of amethyst, the crystal humming under it. Its echoes answer from all around
+		// over the next second, softer each time, as rings of sparks go out; an echo shard rings deeper, with the
+		// rumble of the deep dark under it.
+		float base = echo ? 0.5F : 1.0F;
+		Vec3 at = player.position().add(0, 1.0, 0);
+		level.playSound(null, at.x, at.y, at.z, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.2F, base);
+		for (float note : new float[] {1.0F, 1.26F, 1.5F}) {
+			level.playSound(null, at.x, at.y, at.z, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.0F, base * note);
 		}
+		if (echo) {
+			level.playSound(null, at.x, at.y, at.z, SoundEvents.SCULK_CATALYST_BLOOM, SoundSource.PLAYERS, 1.0F, 0.6F);
+			level.playSound(null, at.x, at.y, at.z, SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 0.25F, 0.5F);
+		}
+		int now = level.getServer().getTickCount();
+		double reachBlocks = MapPlusConfig.get().echoReach * (echo ? 2 : 1);
+		for (int i = 0; i < ECHO_TICKS.length; i++) {
+			float volume = 0.9F * (float) Math.pow(0.7, i);
+			ECHOES.add(new Echo(level, at, now + ECHO_TICKS[i], volume, base * ECHO_PITCHES[i], reachBlocks * (i + 1) / ECHO_TICKS.length, echo));
+		}
+		sparks(level, at, 1.5, echo);
 		MapId mapId = mapStack.get(DataComponents.MAP_ID);
 		MapItemSavedData map = MapItem.getSavedData(mapStack, level);
 		if (mapId == null || map == null || map.locked || !map.dimension.equals(level.dimension())) {
@@ -149,6 +175,37 @@ public final class CaveMaps {
 					}
 				}
 			}
+		}
+	}
+
+	/** Plays the echoes that are due: each from a point out on its ring, so they come back from all around. */
+	private static void echoes(MinecraftServer server) {
+		if (ECHOES.isEmpty()) {
+			return;
+		}
+		int now = server.getTickCount();
+		Iterator<Echo> due = ECHOES.iterator();
+		while (due.hasNext()) {
+			Echo echo = due.next();
+			if (echo.tick() > now) {
+				continue;
+			}
+			due.remove();
+			double angle = echo.level().getRandom().nextDouble() * Math.PI * 2;
+			// Close enough to be heard, far enough to come from somewhere.
+			double away = Math.min(echo.radius(), 12.0);
+			Vec3 from = echo.at().add(Math.cos(angle) * away, 0, Math.sin(angle) * away);
+			echo.level().playSound(null, from.x, from.y, from.z, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, echo.volume(), echo.pitch());
+			sparks(echo.level(), echo.at(), Math.min(echo.radius(), 16.0), echo.deep());
+		}
+	}
+
+	/** A ring of sparks going out (souls for an echo shard). */
+	private static void sparks(ServerLevel level, Vec3 at, double radius, boolean deep) {
+		for (int i = 0; i < RING_PARTICLES; i++) {
+			double angle = i * Math.PI * 2 / RING_PARTICLES;
+			level.sendParticles(deep ? ParticleTypes.SCULK_SOUL : ParticleTypes.ELECTRIC_SPARK, at.x + Math.cos(angle) * radius, at.y,
+					at.z + Math.sin(angle) * radius, 1, Math.cos(angle) * 0.2, 0.0, Math.sin(angle) * 0.2, 0.15);
 		}
 	}
 

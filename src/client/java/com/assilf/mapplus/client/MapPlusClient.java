@@ -7,6 +7,7 @@ import com.assilf.mapplus.client.atlas.SketchPad;
 import com.assilf.mapplus.client.desk.DeskState;
 import com.assilf.mapplus.client.desk.DeskWing;
 import com.assilf.mapplus.client.foresight.MapPlaces;
+import com.assilf.mapplus.client.frame.FramePainter;
 import com.assilf.mapplus.client.foresight.Projection;
 import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.client.marks.ClientMarks;
@@ -53,6 +54,7 @@ public class MapPlusClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(MapInkPayload.TYPE, (payload, context) -> ClientInk.accept(payload));
 		ClientPlayNetworking.registerGlobalReceiver(MapPlacePayload.TYPE, (payload, context) -> MapPlaces.accept(payload));
 		ScopeMap.register();
+		FramePainter.register();
 		Projection.register();
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			ClientMarks.clear();
@@ -91,6 +93,7 @@ public class MapPlusClient implements ClientModInitializer {
 		ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> !pad.mouseClicked(event.x(), event.y(), event.button()));
 		ScreenMouseEvents.allowMouseDrag(screen).register((s, event, dx, dy) -> !pad.mouseDragged(event.x(), event.y(), event.button()));
 		ScreenMouseEvents.allowMouseRelease(screen).register((s, event) -> !pad.mouseReleased(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseScroll(screen).register((s, mouseX, mouseY, horizontal, vertical) -> !pad.mouseScrolled(mouseX, mouseY, vertical));
 		ScreenEvents.remove(screen).register(s -> pad.finish());
 	}
 

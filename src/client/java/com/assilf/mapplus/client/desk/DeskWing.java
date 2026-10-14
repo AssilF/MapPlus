@@ -1338,9 +1338,9 @@ public final class DeskWing {
 		}
 		// The scratch of a pen on paper, now and then while it moves.
 		if (scratchTicks <= 0) {
-			scratchTicks = 4;
-			minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT,
-					0.9F + minecraft.level.getRandom().nextFloat() * 0.4F, 0.25F));
+			scratchTicks = 7;
+			minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN,
+					1.6F + minecraft.level.getRandom().nextFloat() * 0.3F, 0.12F));
 		}
 	}
 
@@ -1443,9 +1443,9 @@ public final class DeskWing {
 			sheetPreview.add(pixels, penSeq, InkPreview.previewColor(material, strokeStrength()));
 		}
 		if (scratchTicks <= 0) {
-			scratchTicks = 4;
-			minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT,
-					0.9F + minecraft.level.getRandom().nextFloat() * 0.4F, 0.25F));
+			scratchTicks = 7;
+			minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN,
+					1.6F + minecraft.level.getRandom().nextFloat() * 0.3F, 0.12F));
 		}
 	}
 

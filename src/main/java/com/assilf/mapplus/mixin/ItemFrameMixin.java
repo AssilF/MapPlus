@@ -15,9 +15,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Using a framed map with a pen in one hand and ink in the other paints it, instead of turning it. */
 @Mixin(ItemFrame.class)
-public abstract class ItemFrameMixin {
+public abstract class ItemFrameMixin implements FramePainting.Frame {
 	@Shadow
 	private boolean fixed;
+
+	@Override
+	public boolean mapplus$isFixed() {
+		return fixed;
+	}
 
 	@Inject(method = "interact", at = @At("HEAD"), cancellable = true)
 	private void mapplus$paint(Player player, InteractionHand hand, Vec3 location, CallbackInfoReturnable<InteractionResult> cir) {
@@ -26,7 +31,8 @@ public abstract class ItemFrameMixin {
 			if (player.level() instanceof ServerLevel level) {
 				FramePainting.paint(level, player, frame, location);
 			}
-			cir.setReturnValue(InteractionResult.SUCCESS);
+			// Consumed without a swing of the arm, so holding use paints quietly.
+			cir.setReturnValue(InteractionResult.CONSUME);
 		}
 	}
 }

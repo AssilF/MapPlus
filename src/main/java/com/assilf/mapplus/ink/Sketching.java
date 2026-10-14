@@ -24,7 +24,11 @@ public final class Sketching {
 	}
 
 	public static void register() {
-		ServerPlayNetworking.registerGlobalReceiver(SketchPayload.TYPE, (payload, context) -> draw(context.player(), payload));
+		ServerPlayNetworking.registerGlobalReceiver(SketchPayload.TYPE, (payload, context) -> {
+			if (InkManager.allowEdit(context.player())) {
+				draw(context.player(), payload);
+			}
+		});
 	}
 
 	/** Whether a page of a book can hold a sketch: any page but a map's, written on or not. */
