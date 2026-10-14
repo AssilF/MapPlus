@@ -217,8 +217,8 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.getInput().lookAt(90, 0);
 			context.waitTicks(60);
 			context.takeScreenshot("far_view");
-			int far = context.computeOnClient(client -> FarLand.kept());
-			if (far == 0) {
+			int farPatches = context.computeOnClient(client -> FarLand.kept());
+			if (farPatches == 0) {
 				throw new AssertionError("No far land was sent while looking through the spyglass");
 			}
 			context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_RIGHT);
