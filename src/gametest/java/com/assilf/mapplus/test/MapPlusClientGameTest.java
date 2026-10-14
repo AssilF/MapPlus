@@ -438,6 +438,28 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 				throw new AssertionError("The lectern's book should have been sent to the player");
 			}
 
+			// At the table, a map and a book of notes: the book lies open on the desk where the map will go, facing the notes.
+			server.runOnServer(minecraft -> openTable(minecraft, menu -> {
+				ItemStack notes = new ItemStack(Items.WRITABLE_BOOK);
+				notes.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(
+						Filterable.passThrough("The valley\n\nWhere the river bends there is a mill, and a ford below it."))));
+				menu.getSlot(CartographyTableMenu.MAP_SLOT).set(exploredMap(minecraft));
+				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(notes);
+			}));
+			context.waitForScreen(CartographyTableScreen.class);
+			context.waitTicks(10);
+			context.takeScreenshot("desk_book");
+			// The atlas on top and shears in the second slot: the map of the spread shown would be cut out.
+			server.runOnServer(minecraft -> withTable(minecraft, menu -> {
+				ItemStack atlas = menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().copy();
+				menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.SHEARS));
+				menu.getSlot(CartographyTableMenu.MAP_SLOT).set(atlas);
+			}));
+			context.waitTicks(10);
+			context.takeScreenshot("desk_cut");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitTicks(2);
+
 			// Foresight far from the world's middle, where a map's own copy in the game can't tell where it lies: a cross
 			// drawn on a map of the land there is projected around the player.
 			int y = server.computeOnServer(minecraft -> {

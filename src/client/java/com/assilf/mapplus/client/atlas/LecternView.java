@@ -27,9 +27,13 @@ public final class LecternView {
 	private static final double SLOPE = Math.toRadians(22.5);
 	/** How wide the open book lies across the lectern, in blocks. */
 	private static final float WIDTH = 0.875F;
-	/** The height of the lectern's sloped top over the middle of the block, and how far above it the book lies. */
-	private static final double MIDDLE_Y = 1.045;
-	private static final double ABOVE = 0.03;
+	/**
+	 * The middle of the lectern's sloped top, as its model has it: a little lower
+	 * than the block's top, and toward the reader. And how far above it the book lies.
+	 */
+	private static final double MIDDLE_Y = 0.997;
+	private static final double MIDDLE_FORWARD = 0.105;
+	private static final double ABOVE = 0.012;
 
 	/** A lectern's book, and the page it's open at. */
 	public record Shown(ItemStack book, int page) {
@@ -92,7 +96,7 @@ public final class LecternView {
 		float middleY = (OpenBook.MIN_Y + OpenBook.MAX_Y) / 2;
 		double[] origin = new double[3];
 		for (int i = 0; i < 3; i++) {
-			double middle = i == 1 ? MIDDLE_Y : 0.5;
+			double middle = i == 1 ? MIDDLE_Y : 0.5 + (i == 0 ? fx : fz) * MIDDLE_FORWARD;
 			origin[i] = middle - into[i] * ABOVE - (across[i] * middleX + down[i] * middleY) * scale;
 		}
 		Matrix4f frame = new Matrix4f(
