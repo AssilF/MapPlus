@@ -12,7 +12,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -110,7 +109,7 @@ public final class FarLand {
 		pose.popPose();
 	}
 
-	private static void draw(Matrix4f at, VertexConsumer vertices, FarViewPayload.Patch patch, float haze, int alpha) {
+	private static void draw(PoseStack.Pose at, VertexConsumer vertices, FarViewPayload.Patch patch, float haze, int alpha) {
 		int step = FarViewPayload.STEP;
 		int side = FarViewPayload.SIDE;
 		FarViewPayload.Patch east = PATCHES.get(key(patch.chunkX() + 1, patch.chunkZ()));

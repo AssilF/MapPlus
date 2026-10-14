@@ -670,6 +670,49 @@ takes ink from a hand. Effort: medium.
    fills the page's writing area as a vanilla book lays it out, so it sits
    where text would.
 
+### Built: smoother hands, joined turfs and the spyglass upgrades
+
+From the third round of playtesting:
+
+- **Sketchbooks:** what's drawn stays shown while the book is open, whatever the
+  book in hand has caught up to. The wheel sizes the pen (1 to 4 points); the
+  eraser is a broad circle; Shift and the right button wipe the page. The quill
+  is heard softly, now and then, not on every point.
+- **Framed painting** is driven by the client while use is held: once a tick it
+  sends where it aims (`FramePaintPayload`), and the server checks reach, the
+  frame and the hands as before. No arm swing; the sound is spaced out. Players
+  without the mod paint by repeated use, as before.
+- **The echo** rings an amethyst chord (resonance, then chimes a third and a
+  fifth apart), with echoes rippling out from points around the ring for a
+  second after; an echo shard adds the catalyst's bloom and a far-off thunder.
+- **Foresight** is worked out every other tick, out to 96 blocks, so it keeps
+  up while running; ink shimmers in waves going out. A key (O) cycles the whole
+  map, its edges only, and off.
+- **Joined turfs:** after the flood, each nation's separate stretches of land
+  reach out to join, from the largest: the cheapest way over open land, as far
+  as a post's reach, becomes theirs, three pixels wide. Water and other nations
+  are in the way. What a join closes in is then taken by surrounding, as before.
+- **Network:** sketch strokes share the per-player edit allowance of the table;
+  a wiped page goes as one bit per pixel. Framed painting is at most once a
+  tick per player, checked against reach.
+- **Far view** (the plan's map-style preview; streaming real chunks is left for
+  later): while scoping, players with the mod are sent the land past their
+  render distance along the line of sight, nearest first, eight chunks a tick:
+  each 2×2 blocks' top and map color (`FarViewPayload`). Chunks are loaded, or
+  generated if `spyglassGeneratesChunks`, in the background. The client draws
+  them as blocks of map color, shaded by slope as maps are, with cliffs between
+  cells, hazed with distance, fading in and out with the spyglass.
+- **Spyglass enchantments** (treasure, tradeable, on random loot; supported by
+  spyglasses, applied at an anvil): Far Sight doubles far view and survey
+  range; Revealing makes living things within 160 blocks and a few degrees of
+  the line of sight glow for the one looking (sent as entity data to that
+  player only, so vanilla clients see it too). Structure outlines are left for
+  later.
+- **Wayfinding** needs no enchantment: a compass in the other hand while scoping
+  points out the nearest biome missing from the holder's Adventuring Time, in
+  the action bar, searched off the main thread within 3,200 blocks and again
+  after moving 128 blocks or half a minute.
+
 ### Built: glow, terrain borders, framed painting and the reworked desk
 
 From the second round of playtesting, and where it differs from the plan above:
@@ -1060,8 +1103,8 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - Text on maps is stored as text (labels), written with a sign.
 - Sketches are page drawings in the book, never maps.
 - Foresight is treasure-only.
-- v1 spyglass: map surveying only. Far view, zoom control and spyglass
-  enchantments come later.
+- Spyglass: surveying, zoom, far view (map-style), Far Sight, Revealing and
+  wayfinding are built; real-chunk far view and structure outlines come later.
 - Spyglass chunk generation: on by default, server setting to turn it off.
 - Territory is visual only (future version); the political view is its own
   kind of map.

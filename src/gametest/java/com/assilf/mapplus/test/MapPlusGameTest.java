@@ -636,6 +636,24 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
+	/** Far view sends a chunk's land as a map shows it: the top of each 2×2 blocks, in its map color. */
+	@GameTest
+	public void farViewSeesTheLand(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos at = helper.absolutePos(new BlockPos(1, 1, 1));
+		// The cell's corner block, where the far view looks.
+		BlockPos corner = new BlockPos(at.getX() & ~1, at.getY() + 4, at.getZ() & ~1);
+		level.setBlock(corner, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+		int chunkX = corner.getX() >> 4;
+		int chunkZ = corner.getZ() >> 4;
+		com.assilf.mapplus.net.FarViewPayload.Patch patch = com.assilf.mapplus.survey.FarView.patch(level, level.getChunk(chunkX, chunkZ), chunkX, chunkZ);
+		int cell = (corner.getX() & 15) / 2 + (corner.getZ() & 15) / 2 * com.assilf.mapplus.net.FarViewPayload.SIDE;
+		helper.assertValueEqual((int) patch.heights()[cell], corner.getY(), Component.literal("the land's top"));
+		helper.assertValueEqual(patch.colors()[cell] & 0xFF, MapColor.GOLD.id, Component.literal("the land's color"));
+		level.setBlock(corner, Blocks.AIR.defaultBlockState(), 3);
+		helper.succeed();
+	}
+
 	/** A cave map shows rock as its darkest shade and open floor as it is. */
 	@GameTest
 	public void caveMapsShowTheirLevel(GameTestHelper helper) {

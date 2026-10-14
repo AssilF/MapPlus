@@ -4,6 +4,7 @@ import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.atlas.Sketch;
 import com.assilf.mapplus.client.atlas.SketchBookScreen;
 import com.assilf.mapplus.client.foresight.Projection;
+import com.assilf.mapplus.client.scope.FarLand;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
@@ -211,6 +212,15 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.getInput().scroll(3);
 			context.waitTicks(10);
 			context.takeScreenshot("scope_zoomed");
+			// Far view: looking out to the horizon, the land past the render distance is sent and drawn.
+			context.getInput().scroll(-3);
+			context.getInput().lookAt(90, 0);
+			context.waitTicks(60);
+			context.takeScreenshot("far_view");
+			int far = context.computeOnClient(client -> FarLand.kept());
+			if (far == 0) {
+				throw new AssertionError("No far land was sent while looking through the spyglass");
+			}
 			context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_RIGHT);
 			context.waitTicks(5);
 

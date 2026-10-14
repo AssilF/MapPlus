@@ -35,7 +35,7 @@ Carry the maps of the land around the one on the table, and they lie around it. 
 - Fills, labels, pins and icons work on one map at a time: zoom in to use them.
 
 ### Painting on the wall
-Hold a feather (or a brush, for a wider pen) in one hand and ink in the other, and use a map in an item frame on a wall: you paint it where it hangs instead of turning it. Hold use to paint strokes; sneak for a lighter coat. Costs ink as at the table, needs build rights, and works for players without the mod too.
+Hold a feather (or a brush, for a wider pen) in one hand and ink in the other, and use a map in an item frame on a wall: you paint it where it hangs instead of turning it. Hold use and sweep across the map to paint smooth strokes; sneak for a lighter coat. Costs ink as at the table, needs build rights, and works for players without the mod too.
 
 ### Planning: labels, pins, icons and borders
 Place a **loom next to the cartography table** to mark maps up for planning: your turf, your city's districts, its roads.
@@ -62,7 +62,7 @@ Removing the mod leaves the atlas as an ordinary book: notes intact, map pages s
 ### Sketchbook
 Any book and quill is a sketchbook. Hold it with ink in your other hand and open it: on any page that isn't a map, the book's own quill draws.
 
-- A dye or ink sac draws in its color, a glow ink sac makes the ink glow, a water bottle washes it out. Hold Shift for a light coat; right-click erases.
+- A dye or ink sac draws in its color, a glow ink sac makes the ink glow, a water bottle washes it out. Hold Shift for a light coat; scroll to size the pen. Right-click erases with a broad eraser; Shift and right-click wipes the whole page.
 - A sketch fills the page's writing area, under the text: draw on an empty page, or around and under what's written. Without ink in your other hand, clicking places the text cursor as usual.
 - Ink is paid for as at the table, from the hand holding it. Free in creative.
 - Sketches show wherever the book does: in hand, signed, on a lectern, and facing a map in an atlas. Up to 16 pages per book.
@@ -72,8 +72,13 @@ Players without the mod, and everyone after removal, see the page's text alone.
 ### Spyglass survey
 Look through a spyglass with a filled map in your other hand: the map fills in with what you see, out to twice the server's view distance. Works for players without the mod too. With the mod, the map shows in the top right corner while you look, and scrolling zooms the spyglass in and out.
 
+- **Far view:** with the mod, looking through a spyglass shows the land past your render distance, as a map would draw it: its colors and heights, hazy with distance, out to three times the server's view distance. The server loads (or generates) what you look at, a few chunks a tick.
+- **Wayfinding:** a compass in your other hand points out the nearest biome you haven't been to yet (as Adventuring Time counts them): its name, how far, and which way. Works for players without the mod too.
+- **Far Sight** (treasure enchantment): the spyglass sees and surveys twice as far.
+- **Revealing** (treasure enchantment): living things in the spyglass's view glow, through walls, for you alone. Works for players without the mod too.
+
 ### Nations
-Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post is the nation's: borders in the nation's color with a light tint inside. Land floods out from the posts, up to 48 blocks across open ground but less through forest, snow and mountains, so borders follow the land; neighbors meet where their reach does, rivers and coasts make natural borders, and land your nation surrounds becomes yours. Crossing a border shows "Entering …" in the action bar. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
+Name a banner in an anvil and put it up: it's a border post of your nation. A nation is a banner design (its color and patterns); its name is the banner's name. The land around each post is the nation's: borders in the nation's color with a light tint inside. Land floods out from the posts, up to 48 blocks across open ground but less through forest, snow and mountains, so borders follow the land; neighbors meet where their reach does, rivers and coasts make natural borders, and land your nation surrounds becomes yours. Crossing a border shows "Entering …" in the action bar. A nation's separate stretches of land reach out to join up over open land, as far as a post reaches, so a few posts make one country rather than a scatter of patches; water and other nations still keep them apart. Take the banner down and the land goes with it. Borders are maps only: nothing is protected.
 
 **Walking the bounds** (experimental, off unless `walkingBounds` is set). Banners can be worn on the head, as raid captains wear them. Wear your named banner and walk around the land you want: the banner remembers the trail, which shows dashed in its color on the map in your hand. Come back to where you started, or back into your nation's land, and the bounds are closed. Take the banner off and plant it: the post claims the trail and everything it closes in, whatever the terrain, and the town bell rings. Land another nation already holds is never taken. A banner remembers up to 2,048 blocks of walking; renaming it starts over.
 
@@ -81,10 +86,10 @@ Name a banner in an anvil and put it up: it's a border post of your nation. A na
 
 ### Caves and the echo
 - **Cave maps:** use an empty map deep underground and you get a Cave Map: it draws what you see around you in the caves, at the level you're at, as a floor plan: open floor in its own colors, darker the deeper it drops, and rock as the darkest shade of itself. Like any map, what it has shown stays: going up or down later fills in only what it hasn't drawn yet.
-- **The echo:** use an amethyst shard with a map in your other hand: it rings out with a peal of thunder, and the land around you fills in at once, even through rock: the caves at your level on a cave map (where it's still blank), the surface on any other. An echo shard rings twice as far.
+- **The echo:** use an amethyst shard with a map in your other hand: it rings out in an amethyst chord that echoes off into the distance, and the land around you fills in at once, even through rock: the caves at your level on a cave map (where it's still blank), the surface on any other. An echo shard rings twice as far.
 
 ### Foresight
-A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon, fading out about 32 blocks away. Only you see it, with the mod; nothing is placed in the world.
+A treasure helmet enchantment, found in loot and sold by librarians. Wearing it, the map in your hand (or the open map of an atlas) is projected onto the land around you as a ghostly blueprint: its ink on the ground, its labels written across it, and a pillar of light at each pin and icon, out to about 96 blocks, shimmering as you go. Press O to switch between the whole map, its edges only, and off. Only you see it, with the mod; nothing is placed in the world.
 
 ## Installation
 Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client, or both:
@@ -124,6 +129,9 @@ Requires Fabric Loader 0.19.5+ and Fabric API. Install on the server, the client
 | `surveyRangeMultiplier` | 2.0 | Survey range, as a multiple of the view distance |
 | `spyglassGeneratesChunks` | true | Surveying may generate unvisited chunks |
 | `surveyChunksPerTick` | 2 | Chunks loaded per tick per player while surveying |
+| `spyglassFarView` | true | Players with the mod see past their render distance through a spyglass |
+| `farViewMultiplier` | 3.0 | Far view's reach, as a multiple of the view distance |
+| `spyglassWayfinding` | true | A compass with a spyglass points out the nearest biome not yet visited |
 
 ## Removing the mod
 Maps keep their own colors; ink, marks and nations are stored separately in `world/data/mapplus/` and simply stop showing. Cave maps keep what they've mapped, but fill in the surface from then on. The only lasting change is terrain the spyglass generated, which is ordinary vanilla terrain. Set `spyglassGeneratesChunks` to `false` to avoid that.
