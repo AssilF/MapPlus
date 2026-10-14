@@ -50,12 +50,18 @@ Place a **loom next to the cartography table** to mark maps up for planning: you
 For example, to mark your turf: draw its border with an iron chain, tint it by filling it with the bucket at ¼ strength, write its name with a sign, and pin your banner.
 
 ### Atlas
-Put a filled map in the cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with the map stitched in as its next page. Stitch more maps the same way, with the atlas in the second slot. The maps are used up and can't be taken back out.
+Put a filled map in the cartography table's top slot and a book and quill in the second slot: the result is an **Atlas** with the map stitched in. Stitch more maps the same way, with the atlas in the second slot.
 
-The atlas opens in the vanilla book and quill screen. Each stitched map shows on the page facing its notes, on the left or the right depending on where it was stitched: a map stitched after a left page faces it from the right; otherwise it starts a new spread on the left, with an empty page for notes on the right.
+**Where the map goes.** A book remembers the page it was last closed on, and the table opens it there: the book lies open on the desk, showing exactly where the map will land, with arrows to turn it as on a lectern. The map goes on an empty page there, or on the empty page facing your notes; if the spread already has a map or a sketch, a new spread goes in after it and later pages move on by two, so every map keeps facing its notes. Write about your village on page 7, close the book, stitch the village map, and it faces your notes on page 8. Hover a page on the desk to see its first lines.
+
+**Cutting maps out.** Put an unsigned atlas in the top slot and shears in the second: the result is the map of the spread shown, exactly as it was stitched. Taking it wears the shears and leaves the page empty; the notes stay and no other page moves. Turn the page to cut another. Signed atlases can be copied, so they never give maps back.
+
+The atlas opens in the vanilla book and quill screen. Each stitched map shows on the page facing its notes.
 
 - **Notes:** write as in any book. Sign it to make it read-only; signed atlases can be copied like written books and read on lecterns.
 - **Explore:** held, the atlas keeps filling in the map of the spread it was last closed on, like a held map. Copies show the maps but don't fill them in.
+- **Held open:** with the mod, any book in hand is held open like a map, both hands when the other is free, at the spread it was last read at: its writing, sketches and maps, readable without opening it.
+- **On a lectern:** with the mod, a lectern's book lies open across it at its page, readable as you walk up.
 
 Removing the mod leaves the atlas as an ordinary book: notes intact, map pages showing the map's name.
 

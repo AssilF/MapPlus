@@ -659,9 +659,9 @@ takes ink from a hand. Effort: medium.
    (built; see [Built: tints and icons](#built-tints-and-icons))
 4. ~~The drafting table~~ (built; see
    [Built: the drafting table](#built-the-drafting-table))
-5. Choosing the page and cutting maps out, with the book on the desk
-6. Atlases shown like maps: held, the open spread's map shows as a held map
-   does; in an item frame, the open map shows as a framed map does
+5. ~~Choosing the page and cutting maps out, with the book on the desk~~ (built)
+6. Atlases shown like maps: ~~held~~ (built: any book is held open); in an
+   item frame, the open map shows as a framed map does
 7. ~~Painting framed maps~~ (built, on walls)
 8. One ink file per map
 9. Sketches: ~~in the hand with the quill only~~ (built; see
@@ -669,6 +669,32 @@ takes ink from a hand. Effort: medium.
    at the table, on the book on the desk, with all the table's tools. A sketch
    fills the page's writing area as a vanilla book lays it out, so it sits
    where text would.
+
+### Built: books open in hand, on lecterns and on the desk
+
+- **Held open:** a book and quill or written book in hand goes down vanilla's
+  held-map path (`FirstPersonHandsAndItemsRenderer`: the map check is
+  `has(MAP_ID)`, and books join it), so it's held in both hands when the other
+  is free and in one otherwise. Instead of the map, the spread is drawn as the
+  book screen lays it out, in book screen pixels (`OpenBook`): the page texture,
+  text, sketches (one texture per sketch, cached) and stitched maps through the
+  map renderer. It opens where the book was last closed, remembered by the
+  client per book, else the atlas's bookmark, else the first spread.
+- **Lecterns:** vanilla never sends a lectern's book. `LecternBooks` sends
+  players with the mod each lectern's book within 24 blocks once, then only its
+  page as it turns (`LecternBookPayload`). Within 12 blocks the lectern draws
+  the spread across its sloped top, in place of the little book, centered where
+  the model's top is.
+- **The book on the desk**, as planned, with these choices: the bookmark is the
+  atlas's `selected` page, now any page (old atlases read as before: exploring
+  uses the map of that spread); any book and quill gets one when closed, which
+  makes plain books carry atlas data without maps. The table's page is a data
+  slot added only to desk menus (both sides know), turned with menu buttons 1
+  and 2. A new book on the table opens at its bookmark, or its last page; an
+  atlas to cut from opens at the first map from its bookmark on. While
+  stitching, the desk shows the result at its new map; while cutting, the atlas
+  at the table's page. Shift-clicking shears puts them in the second slot.
+- **Still planned:** an atlas in an item frame showing its open map.
 
 ### Built: smoother hands, joined turfs and the spyglass upgrades
 
@@ -1078,9 +1104,9 @@ original leads". Kept out of the main mod; may become a parallel variant.
 
 ## Decisions
 
-- A map is consumed when stitched into an atlas. (Planned: it can be cut back
-  out with shears at the table while the atlas is unsigned; signing makes its
-  maps permanent.)
+- A map is consumed when stitched into an atlas, and can be cut back out with
+  shears at the table while the atlas is unsigned; signing makes its maps
+  permanent.
 - Drawing uses ink and dyes.
 - Client-only mode comes later.
 - In-world projection requires a helmet enchanted with Foresight, and the map
