@@ -81,7 +81,7 @@ public final class SpyglassSurvey {
 			return;
 		}
 
-		double range = server.getPlayerList().getViewDistance() * 16.0 * config.surveyRangeMultiplier;
+		double range = server.getPlayerList().getViewDistance() * 16.0 * config.surveyRangeMultiplier * FarView.reach(player);
 		int scale = MapPixels.scaleBlocks(map);
 		double step = Math.max(1.0, scale / 2.0);
 		Vec3 eye = player.getEyePosition();

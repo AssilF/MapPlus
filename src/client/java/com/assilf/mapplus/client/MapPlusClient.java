@@ -13,6 +13,7 @@ import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.client.marks.ClientMarks;
 import com.assilf.mapplus.client.marks.MarkIcons;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.client.scope.FarLand;
 import com.assilf.mapplus.client.scope.ScopeMap;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.net.AtlasPagePayload;
@@ -54,6 +55,7 @@ public class MapPlusClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(MapInkPayload.TYPE, (payload, context) -> ClientInk.accept(payload));
 		ClientPlayNetworking.registerGlobalReceiver(MapPlacePayload.TYPE, (payload, context) -> MapPlaces.accept(payload));
 		ScopeMap.register();
+		FarLand.register();
 		FramePainter.register();
 		Projection.register();
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {

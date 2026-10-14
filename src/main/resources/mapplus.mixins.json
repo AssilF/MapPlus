@@ -9,6 +9,7 @@
 		"CartographyResultSlotMixin",
 		"CartographyTableMenuMixin",
 		"EmptyMapItemMixin",
+		"EntityAccessor",
 		"HoldingPlayerMixin",
 		"ItemFrameMixin",
 		"MapItemMixin",

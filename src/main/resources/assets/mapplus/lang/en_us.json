@@ -68,7 +68,20 @@
 	"mapplus.desk.hint.sheet_empty": "Carry the maps of the land around this one, and they lie around it here",
 	"mapplus.desk.hint.sheet_zoom": "Zoom in to use this on one map",
 	"key.mapplus.foresight": "Foresight view",
-	"mapplus.foresight.full": "Foresight: the whole map",
+	"mapplus.foresight.full": "Foresight: all of the map",
 	"mapplus.foresight.edges": "Foresight: edges only",
-	"mapplus.foresight.off": "Foresight: off"
+	"mapplus.foresight.off": "Foresight: off",
+	"enchantment.mapplus.far_sight": "Far Sight",
+	"enchantment.mapplus.revealing": "Revealing",
+	"mapplus.wayfinding.looking": "Looking for somewhere new...",
+	"mapplus.wayfinding.none": "Nowhere new within reach",
+	"mapplus.wayfinding.found": "%s: %s blocks %s",
+	"mapplus.direction.north": "north",
+	"mapplus.direction.north_east": "north-east",
+	"mapplus.direction.east": "east",
+	"mapplus.direction.south_east": "south-east",
+	"mapplus.direction.south": "south",
+	"mapplus.direction.south_west": "south-west",
+	"mapplus.direction.west": "west",
+	"mapplus.direction.north_west": "north-west"
 }

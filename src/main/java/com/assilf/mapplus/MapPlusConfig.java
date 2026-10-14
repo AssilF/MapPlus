@@ -44,6 +44,12 @@ public final class MapPlusConfig {
 	public boolean spyglassGeneratesChunks = true;
 	/** Chunks the spyglass may load or generate per tick, per player. */
 	public int surveyChunksPerTick = 2;
+	/** Whether players with the mod see the land past their render distance while looking through a spyglass. */
+	public boolean spyglassFarView = true;
+	/** How far the far view reaches, as a multiple of the server view distance. */
+	public double farViewMultiplier = 3.0;
+	/** Whether a spyglass with a compass in the other hand points out the nearest biome its holder hasn't been to. */
+	public boolean spyglassWayfinding = true;
 
 	/** Whether named banners put up in the world are nations' border posts. */
 	public boolean nations = true;
@@ -109,6 +115,7 @@ public final class MapPlusConfig {
 		config.surveyPixelsPerTick = Math.max(0, config.surveyPixelsPerTick);
 		config.surveyRangeMultiplier = Math.max(1.0, config.surveyRangeMultiplier);
 		config.surveyChunksPerTick = Math.max(0, config.surveyChunksPerTick);
+		config.farViewMultiplier = Math.clamp(config.farViewMultiplier, 1.0, 8.0);
 		config.postReach = Math.clamp(config.postReach, 1, 1024);
 		// A march no longer than this closes in no more land than one claim can hold.
 		config.boundsLength = Math.clamp(config.boundsLength, 0, 4096);
