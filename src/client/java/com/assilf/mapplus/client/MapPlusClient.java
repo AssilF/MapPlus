@@ -13,6 +13,8 @@ import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.client.marks.ClientMarks;
 import com.assilf.mapplus.client.marks.MarkIcons;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.client.atlas.LecternView;
+import com.assilf.mapplus.client.atlas.OpenBook;
 import com.assilf.mapplus.client.scope.FarLand;
 import com.assilf.mapplus.client.scope.ScopeMap;
 import com.assilf.mapplus.ink.DrawingDesk;
@@ -56,6 +58,7 @@ public class MapPlusClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(MapPlacePayload.TYPE, (payload, context) -> MapPlaces.accept(payload));
 		ScopeMap.register();
 		FarLand.register();
+		LecternView.register();
 		FramePainter.register();
 		Projection.register();
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
@@ -138,6 +141,9 @@ public class MapPlusClient implements ClientModInitializer {
 
 	/** A held atlas explores with the map it was closed on. */
 	private static void leftOpen(AtlasBookScreen book) {
+		if (!(book instanceof net.minecraft.client.gui.screens.inventory.LecternScreen)) {
+			OpenBook.readAt(book.mapplus$atlasPage());
+		}
 		InteractionHand hand = book.mapplus$atlasHand();
 		if (hand != null && ClientPlayNetworking.canSend(AtlasPagePayload.TYPE)) {
 			ClientPlayNetworking.send(new AtlasPagePayload(hand == InteractionHand.OFF_HAND, book.mapplus$atlasPage()));

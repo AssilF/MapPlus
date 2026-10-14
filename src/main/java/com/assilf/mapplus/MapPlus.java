@@ -1,6 +1,7 @@
 package com.assilf.mapplus;
 
 import com.assilf.mapplus.atlas.AtlasManager;
+import com.assilf.mapplus.atlas.LecternBooks;
 import com.assilf.mapplus.ink.CauldronWashing;
 import com.assilf.mapplus.ink.FramePainting;
 import com.assilf.mapplus.ink.Sketching;
@@ -18,6 +19,7 @@ import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MapMarksPayload;
 import com.assilf.mapplus.net.MapInkPayload;
 import com.assilf.mapplus.net.FarViewPayload;
+import com.assilf.mapplus.net.LecternBookPayload;
 import com.assilf.mapplus.net.MapPlacePayload;
 import com.assilf.mapplus.net.MarkEditPayload;
 import com.assilf.mapplus.net.SketchPayload;
@@ -61,6 +63,7 @@ public class MapPlus implements ModInitializer {
 		PayloadTypeRegistry.clientboundPlay().register(MapInkPayload.TYPE, MapInkPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(MapPlacePayload.TYPE, MapPlacePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(FarViewPayload.TYPE, FarViewPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(LecternBookPayload.TYPE, LecternBookPayload.CODEC);
 
 		InkManager.register();
 		MarkManager.register();
@@ -76,6 +79,7 @@ public class MapPlus implements ModInitializer {
 		FramePainting.register();
 		Sketching.register();
 		AtlasManager.register();
+		LecternBooks.register();
 	}
 
 	/**

@@ -410,6 +410,29 @@ public class MapPlusClientGameTest implements FabricClientGameTest {
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(2);
 
+			// The book in hand, the other hand free: held open as a map is, at the spread it was closed on.
+			server.runOnServer(minecraft -> minecraft.getPlayerList().getPlayers().getFirst().setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY));
+			context.getInput().lookAt(180, 20);
+			context.waitTicks(15);
+			context.takeScreenshot("held_book");
+
+			// On a lectern in front of the player, the book lies open at its page for players with the mod.
+			server.runOnServer(minecraft -> {
+				ServerPlayer player = minecraft.getPlayerList().getPlayers().getFirst();
+				ServerLevel level = player.level();
+				BlockPos pos = player.blockPosition().north(2);
+				level.setBlockAndUpdate(pos, Blocks.LECTERN.defaultBlockState()
+						.setValue(net.minecraft.world.level.block.LecternBlock.FACING, net.minecraft.core.Direction.SOUTH)
+						.setValue(net.minecraft.world.level.block.LecternBlock.HAS_BOOK, true));
+				if (level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.LecternBlockEntity lectern) {
+					lectern.setBook(player.getMainHandItem().copy());
+				}
+				player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+			});
+			context.getInput().lookAt(180, 40);
+			context.waitTicks(30);
+			context.takeScreenshot("lectern_book");
+
 			// Foresight far from the world's middle, where a map's own copy in the game can't tell where it lies: a cross
 			// drawn on a map of the land there is projected around the player.
 			int y = server.computeOnServer(minecraft -> {
