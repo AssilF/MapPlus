@@ -3,12 +3,15 @@
 	"package": "com.assilf.mapplus.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
+		"BannerPlacementMixin",
 		"CartographyAdditionalSlotMixin",
 		"CartographyMapSlotMixin",
 		"CartographyResultSlotMixin",
 		"CartographyTableMenuMixin",
 		"EmptyMapItemMixin",
+		"EntityAccessor",
 		"HoldingPlayerMixin",
+		"ItemFrameMixin",
 		"MapItemMixin",
 		"MapItemSavedDataAccessor",
 		"MapItemSavedDataMixin"

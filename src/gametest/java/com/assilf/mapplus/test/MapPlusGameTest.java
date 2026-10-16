@@ -2,7 +2,20 @@ package com.assilf.mapplus.test;
 
 import com.assilf.mapplus.MapPlusConfig;
 import com.assilf.mapplus.atlas.Atlas;
+import com.assilf.mapplus.atlas.Sketch;
+import com.assilf.mapplus.ink.Sketching;
+import com.assilf.mapplus.nation.Bounds;
+import com.assilf.mapplus.nation.Claim;
+import com.assilf.mapplus.nation.Marches;
+import com.assilf.mapplus.nation.NationData;
+import com.assilf.mapplus.nation.Nations;
+import com.assilf.mapplus.net.SketchPayload;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.AbstractBannerBlock;
 import com.assilf.mapplus.ink.DrawingDesk;
+import com.assilf.mapplus.ink.FramePainting;
 import com.assilf.mapplus.ink.Ink;
 import com.assilf.mapplus.ink.InkData;
 import com.assilf.mapplus.ink.InkLayer;
@@ -11,11 +24,15 @@ import com.assilf.mapplus.ink.InkMaterial;
 import com.assilf.mapplus.ink.InkSupply;
 import com.assilf.mapplus.ink.Mark;
 import com.assilf.mapplus.ink.MarkManager;
+import com.assilf.mapplus.nation.Post;
+import com.assilf.mapplus.nation.Territory;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MarkEditPayload;
+import com.assilf.mapplus.survey.CaveMaps;
 import com.assilf.mapplus.survey.MapPixels;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
@@ -23,8 +40,11 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.Filterable;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CartographyTableMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -39,6 +59,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 
 import java.util.BitSet;
@@ -83,17 +104,24 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** Washing removes ink, and the next packet resends the map's own colors. */
+	/** Each wash waters ink down a step; four wash full ink off, and the next packet resends the map's own colors. */
 	@GameTest
-	public void washingRemovesInk(GameTestHelper helper) {
+	public void washingFadesInk(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
 		MapItemSavedData map = level.getMapData(mapId);
 		int index = 20 + 30 * Ink.SIZE;
-		InkData.get(level.getServer()).getOrCreate(mapId).set(index, Ink.encode(DyeColor.BLUE, true));
+		InkLayer layer = InkData.get(level.getServer()).getOrCreate(mapId);
+		layer.set(index, Ink.encode(DyeColor.BLUE, true));
 
-		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("Wash should remove ink"));
-		helper.assertFalse(InkManager.wash(level.getServer(), mapId), Component.literal("Second wash has nothing to remove"));
+		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("Wash should water ink down"));
+		helper.assertValueEqual(Ink.strength(layer.get(index)), 1, Component.literal("strength after one wash"));
+		helper.assertTrue(Ink.isGlow(layer.get(index)) && Ink.dye(layer.get(index)) == DyeColor.BLUE, Component.literal("still glowing blue"));
+		for (int i = 0; i < 3; i++) {
+			helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("Wash " + (i + 2) + " should water ink down"));
+		}
+		helper.assertFalse(Ink.isPresent(layer.get(index)), Component.literal("Four washes take full ink off"));
+		helper.assertFalse(InkManager.wash(level.getServer(), mapId), Component.literal("Fifth wash has nothing to remove"));
 
 		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
 		MapItemSavedData.MapPatch patch = firstPatch(helper, map, mapId, player);
@@ -448,7 +476,7 @@ public class MapPlusGameTest {
 		helper.succeed();
 	}
 
-	/** Washing takes ink and labels off a map; pins are banners, not ink, and stay. */
+	/** Washing waters labels down until they're gone; pins are banners, not ink, and stay. */
 	@GameTest
 	public void washingKeepsPins(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
@@ -456,8 +484,233 @@ public class MapPlusGameTest {
 		InkLayer layer = InkData.get(level.getServer()).getOrCreate(mapId);
 		layer.putMark(new Mark(1, Mark.Kind.LABEL, 10, 10, DyeColor.BLACK, "Farm", Mark.MEDIUM, Optional.empty()));
 		layer.putMark(new Mark(2, Mark.Kind.PIN, 20, 20, DyeColor.RED, "", Mark.MEDIUM, Optional.empty()));
-		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("a label washes off"));
-		helper.assertTrue(layer.marks().size() == 1 && !layer.marks().getFirst().isLabel(), Component.literal("the pin stays"));
+		helper.assertTrue(InkManager.wash(level.getServer(), mapId), Component.literal("a label washes"));
+		helper.assertValueEqual(layer.findMark(1).fade(), 1, Component.literal("the label fades a step"));
+		for (int i = 0; i < 3; i++) {
+			InkManager.wash(level.getServer(), mapId);
+		}
+		helper.assertTrue(layer.marks().size() == 1 && !layer.marks().getFirst().isLabel(), Component.literal("the label washed off, the pin stays"));
+		helper.succeed();
+	}
+
+	/**
+	 * Watered down ink costs less, tints the map, and only water makes it
+	 * fainter. Players without the mod see it as a pattern over the map.
+	 */
+	@GameTest
+	public void tintsAreWateredDownInk(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.RED), 1));
+
+		InkManager.draw(player, menu, level, new InkStrokePayload(1, mapId.id(), false, 2, pixels(0, 1, 128, 129)));
+		InkLayer layer = InkData.get(level.getServer()).find(mapId);
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 2, Component.literal("drawn at half strength"));
+		InkMaterial red = new InkMaterial(InkMaterial.Kind.DYE, DyeColor.RED);
+		helper.assertValueEqual(red.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY)), red.perItem() - 2,
+				Component.literal("four pixels at half strength cost two"));
+
+		MapItemSavedData.MapPatch patch = firstPatch(helper, map, mapId, helper.makeMockPlayer(GameType.SURVIVAL));
+		helper.assertValueEqual(patch.mapColors()[(0 - patch.startX()) - patch.startY() * patch.width()], Ink.toMapColor(layer.get(0)),
+				Component.literal("half strength shows on its half of the pattern"));
+		helper.assertValueEqual(patch.mapColors()[(1 - patch.startX()) - patch.startY() * patch.width()], map.colors[1],
+				Component.literal("and the map shows through the other half"));
+
+		InkManager.draw(player, menu, level, new InkStrokePayload(2, mapId.id(), false, 3, pixels(0)));
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 2, Component.literal("fainter dye doesn't water ink down"));
+		InkManager.draw(player, menu, level, new InkStrokePayload(3, mapId.id(), false, 1, pixels(0)));
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 1, Component.literal("stronger dye makes it stronger"));
+
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(PotionContents.createItemStack(Items.POTION, Potions.WATER));
+		InkManager.draw(player, menu, level, new InkStrokePayload(4, mapId.id(), false, 1, pixels(0, 1)));
+		helper.assertValueEqual(Ink.strength(layer.get(0)), 2, Component.literal("watered water fades a step"));
+		helper.assertValueEqual(Ink.strength(layer.get(1)), 3, Component.literal("to the faintest"));
+		InkManager.draw(player, menu, level, new InkStrokePayload(5, mapId.id(), false, 1, pixels(1)));
+		helper.assertFalse(Ink.isPresent(layer.get(1)), Component.literal("and past it, off the map"));
+		helper.succeed();
+	}
+
+	/** A sherd stamps its picture in the second slot's dye; marks are sized by scrolling, and growing a label costs ink. */
+	@GameTest
+	public void iconsAndSizes(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		helper.setBlock(new BlockPos(0, 0, 1), Blocks.LOOM);
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		InkData data = InkData.get(level.getServer());
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(mapId));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DYE.pick(DyeColor.GREEN), 1));
+		InkMaterial green = new InkMaterial(InkMaterial.Kind.DYE, DyeColor.GREEN);
+
+		ItemStack sherd = new ItemStack(Items.SHEAF_POTTERY_SHERD);
+		sherd.set(DataComponents.CUSTOM_NAME, Component.literal("Wheat farm"));
+		menu.setCarried(sherd);
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(1, mapId.id(), MarkEditPayload.Action.ICON, -1, 50, 50, Mark.MEDIUM, "")),
+				Component.literal("icon stamped"));
+		Mark icon = data.find(mapId).marks().getFirst();
+		helper.assertTrue(icon.kind() == Mark.Kind.ICON && icon.color() == DyeColor.GREEN && icon.symbol().contains("sheaf")
+				&& icon.text().equals("Wheat farm"), Component.literal("a green sheaf named after its sherd, got " + icon));
+		helper.assertValueEqual(green.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY)), green.perItem() - Mark.iconCost(Mark.MEDIUM),
+				Component.literal("the icon costs its ink"));
+
+		menu.setCarried(new ItemStack(Items.OAK_SIGN));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(2, mapId.id(), MarkEditPayload.Action.WRITE, -1, 20, 20, Mark.SMALL, "Farms")),
+				Component.literal("label written"));
+		Mark label = data.find(mapId).marks().get(1);
+		int before = green.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(3, mapId.id(), MarkEditPayload.Action.RESIZE, label.id(), 0, 0, Mark.LARGE, "")),
+				Component.literal("label made larger"));
+		helper.assertValueEqual(data.find(mapId).findMark(label.id()).size(), Mark.LARGE, Component.literal("label's new size"));
+		helper.assertValueEqual(before - green.charge(player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY)),
+				Mark.cost("Farms", Mark.LARGE) - Mark.cost("Farms", Mark.SMALL), Component.literal("growing pays for the difference"));
+		helper.assertFalse(MarkManager.edit(player, menu, level, new MarkEditPayload(4, mapId.id(), MarkEditPayload.Action.RESIZE, icon.id(), 0, 0, Mark.SMALL, "")),
+				Component.literal("an icon isn't sized with a sign"));
+		menu.setCarried(sherd);
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(5, mapId.id(), MarkEditPayload.Action.RESIZE, icon.id(), 0, 0, Mark.SMALL, "")),
+				Component.literal("icon made smaller, with its sherd"));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.GLOW_INK_SAC, 1));
+		helper.assertTrue(MarkManager.edit(player, menu, level, new MarkEditPayload(6, mapId.id(), MarkEditPayload.Action.GLOW, icon.id(), 0, 0, 0, "")),
+				Component.literal("icon made to glow"));
+		helper.assertTrue(data.find(mapId).findMark(icon.id()).glow(), Component.literal("the icon glows"));
+		helper.succeed();
+	}
+
+	/**
+	 * A border post holds the land around it on maps, as far as it reaches;
+	 * water stops it, and the map's border shows in the nation's color.
+	 */
+	@GameTest
+	public void postsHoldLand(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		byte grass = MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL);
+		java.util.Arrays.fill(map.colors, grass);
+		// In the middle of the map, which vanilla lines up on a grid rather than on the test.
+		BlockPos at = new BlockPos(map.centerX, 1, map.centerZ);
+		int px = MapPixels.pixelX(map, at.getX());
+		int pz = MapPixels.pixelZ(map, at.getZ());
+		// A river two pixels east of the post, running the whole height of the map.
+		for (int z = 0; z < Ink.SIZE; z++) {
+			map.colors[Math.min(Ink.SIZE - 1, px + 2) + z * Ink.SIZE] = MapColor.WATER.getPackedId(MapColor.Brightness.NORMAL);
+		}
+		List<Post> posts = List.of(new Post(level.dimension(), at, DyeColor.RED, List.of(), "Redland"));
+		Territory territory = Territory.of(map, posts, 12);
+		helper.assertValueEqual(territory.owner(px + pz * Ink.SIZE), 1, Component.literal("the post's own spot"));
+		helper.assertValueEqual(territory.owner(Math.max(0, px - 8) + pz * Ink.SIZE), 1, Component.literal("land within reach"));
+		helper.assertValueEqual(territory.owner(Math.max(0, px - 20) + pz * Ink.SIZE), 0, Component.literal("land out of reach"));
+		helper.assertValueEqual(territory.owner(Math.min(Ink.SIZE - 1, px + 4) + pz * Ink.SIZE), 0, Component.literal("land across the river"));
+		boolean border = false;
+		for (int i = 0; i < Ink.PIXELS; i++) {
+			border |= territory.isBorder(i);
+		}
+		helper.assertTrue(border, Component.literal("the land has a border"));
+		helper.succeed();
+	}
+
+	/** Two posts of a nation a little out of each other's reach join up their land, unless water is in the way. */
+	@GameTest
+	public void postsJoinUp(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		java.util.Arrays.fill(map.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		int px = MapPixels.pixelX(map, map.centerX);
+		int pz = MapPixels.pixelZ(map, map.centerZ);
+		// Thirty blocks apart, each reaching twelve: six blocks of open land between them.
+		List<Post> posts = List.of(new Post(level.dimension(), new BlockPos(map.centerX - 15, 1, map.centerZ), DyeColor.RED, List.of(), "Redland"),
+				new Post(level.dimension(), new BlockPos(map.centerX + 15, 1, map.centerZ), DyeColor.RED, List.of(), "Redland"));
+		Territory territory = Territory.of(map, posts, 12);
+		helper.assertValueEqual(territory.owner(px + pz * Ink.SIZE), 1, Component.literal("the land between the posts joins them"));
+
+		// A river between them keeps them apart.
+		for (int z = 0; z < Ink.SIZE; z++) {
+			map.colors[px + z * Ink.SIZE] = MapColor.WATER.getPackedId(MapColor.Brightness.NORMAL);
+		}
+		territory = Territory.of(map, posts, 12);
+		helper.assertValueEqual(territory.owner(px - 1 + pz * Ink.SIZE), 0, Component.literal("water keeps them apart"));
+		helper.succeed();
+	}
+
+	/** Far view sends a chunk's land as a map shows it: the top of each 2×2 blocks, in its map color. */
+	@GameTest
+	public void farViewSeesTheLand(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos at = helper.absolutePos(new BlockPos(1, 1, 1));
+		// The cell's corner block, where the far view looks.
+		BlockPos corner = new BlockPos(at.getX() & ~1, at.getY() + 4, at.getZ() & ~1);
+		level.setBlock(corner, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+		int chunkX = corner.getX() >> 4;
+		int chunkZ = corner.getZ() >> 4;
+		com.assilf.mapplus.net.FarViewPayload.Patch patch = com.assilf.mapplus.survey.FarView.patch(level, level.getChunk(chunkX, chunkZ), chunkX, chunkZ);
+		int cell = (corner.getX() & 15) / 2 + (corner.getZ() & 15) / 2 * com.assilf.mapplus.net.FarViewPayload.SIDE;
+		helper.assertValueEqual((int) patch.heights()[cell], corner.getY(), Component.literal("the land's top"));
+		helper.assertValueEqual(patch.colors()[cell] & 0xFF, MapColor.GOLD.id, Component.literal("the land's color"));
+		level.setBlock(corner, Blocks.AIR.defaultBlockState(), 3);
+		helper.succeed();
+	}
+
+	/** A cave map shows rock as its darkest shade and open floor as it is. */
+	@GameTest
+	public void caveMapsShowTheirLevel(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData map = level.getMapData(mapId);
+		BlockPos wall = helper.absolutePos(new BlockPos(1, 2, 1));
+		BlockPos open = helper.absolutePos(new BlockPos(3, 2, 3));
+		helper.setBlock(new BlockPos(1, 2, 1), Blocks.STONE);
+		helper.setBlock(new BlockPos(3, 2, 3), Blocks.AIR);
+		helper.setBlock(new BlockPos(3, 1, 3), Blocks.COBBLESTONE);
+		MapPixels.ChunkLookup chunks = MapPixels.ChunkLookup.loaded(level);
+		int depth = wall.getY();
+		helper.assertValueEqual(MapPixels.caveColor(level, chunks, map, MapPixels.pixelX(map, wall.getX()), MapPixels.pixelZ(map, wall.getZ()), depth),
+				MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST) & 0xFF, Component.literal("rock"));
+		helper.assertValueEqual(MapPixels.caveColor(level, chunks, map, MapPixels.pixelX(map, open.getX()), MapPixels.pixelZ(map, open.getZ()), depth),
+				MapColor.STONE.getPackedId(MapColor.Brightness.HIGH) & 0xFF, Component.literal("the floor just below"));
+
+		InkData.get(level.getServer()).setDepth(mapId, depth);
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		// A cave map draws at its holder's head height.
+		player.setPos(open.getX() + 0.5, depth - 1, open.getZ() + 0.5);
+		ItemStack mapStack = mapItem(mapId);
+		CaveMaps.ring(level, player, mapStack, false);
+		int wallPixel = MapPixels.pixelX(map, wall.getX()) + MapPixels.pixelZ(map, wall.getZ()) * Ink.SIZE;
+		helper.assertValueEqual(map.colors[wallPixel], MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST),
+				Component.literal("an amethyst shard's ring maps the cave around"));
+		// A level higher, the wall's column is open; but what was drawn there first stays, as on any map.
+		player.setPos(open.getX() + 0.5, depth, open.getZ() + 0.5);
+		CaveMaps.ring(level, player, mapStack, false);
+		CaveMaps.update(level, player, map, mapId);
+		helper.assertValueEqual(map.colors[wallPixel], MapColor.STONE.getPackedId(MapColor.Brightness.LOWEST),
+				Component.literal("what a cave map showed first stays"));
+		helper.succeed();
+	}
+
+	/** A framed map is painted where it's used, with a pen in one hand and ink in the other, instead of turning. */
+	@GameTest
+	public void framedMapsArePainted(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MapId mapId = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		ItemFrame frame = new ItemFrame(level, helper.absolutePos(new BlockPos(1, 2, 1)), Direction.NORTH);
+		frame.setItem(mapItem(mapId), false);
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.FEATHER));
+		player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.DYE.pick(DyeColor.BLUE), 4));
+		helper.assertTrue(FramePainting.paints(player, frame, false), Component.literal("a feather and dye paint a framed map"));
+
+		// Seen from in front of a frame facing north, its right is the west; a quarter of a block right and up.
+		FramePainting.paint(level, player, frame, new Vec3(-0.25, 0.25, 0.0));
+		InkLayer layer = InkData.get(level.getServer()).find(mapId);
+		helper.assertTrue(layer != null && Ink.isPresent(layer.get(96 + 32 * Ink.SIZE)), Component.literal("painted where it was used"));
+		helper.assertValueEqual(frame.getRotation(), 0, Component.literal("the map didn't turn"));
+
+		player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+		helper.assertFalse(FramePainting.paints(player, frame, false), Component.literal("ink alone doesn't paint"));
 		helper.succeed();
 	}
 
@@ -528,6 +781,8 @@ public class MapPlusGameTest {
 		List<Filterable<String>> written = List.of(Filterable.passThrough(pages(atlasStack).get(0)),
 				Filterable.passThrough("Village"), Filterable.passThrough("Mine"));
 		atlasStack.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(written));
+		// Closed on the page about the mine, so the next map faces it.
+		Atlas.read(atlasStack).orElseThrow().withSelected(2).write(atlasStack);
 		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(second));
 		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(atlasStack);
 		ItemStack bigger = menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem();
@@ -540,6 +795,75 @@ public class MapPlusGameTest {
 		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(bigger.copy());
 		helper.assertTrue(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem().isEmpty(),
 				Component.literal("A map already in the atlas can't be stitched again"));
+		helper.succeed();
+	}
+
+	/** A map stitched into a book goes where the book was left open: facing the notes there, or in a new spread after a map. */
+	@GameTest
+	public void stitchingFollowsTheBookmark(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+		MapId village = newMap(level, origin);
+		MapId mine = newMap(level, origin.offset(512, 0, 0));
+		ItemStack book = new ItemStack(Items.WRITABLE_BOOK);
+		book.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(Filterable.passThrough("About the village"),
+				Filterable.passThrough(""), Filterable.passThrough("About the mine"))));
+		Atlas.EMPTY.withSelected(0).write(book);
+
+		ItemStack first = Atlas.stitch(book, mapItem(village), level.registryAccess());
+		Atlas atlas = Atlas.read(first).orElseThrow();
+		helper.assertValueEqual(atlas.plateAt(1).id(), village, Component.literal("the map faces the notes it was left open at"));
+		helper.assertValueEqual(pages(first).get(2), "About the mine", Component.literal("no other page moves"));
+		helper.assertValueEqual(atlas.selected(), 1, Component.literal("bookmarked at the new map"));
+
+		// Bookmarked at that map, the next one goes in a new spread after it, and the notes after it move on by two.
+		ItemStack second = Atlas.stitch(first, mapItem(mine), level.registryAccess());
+		Atlas both = Atlas.read(second).orElseThrow();
+		helper.assertValueEqual(both.plateAt(2).id(), mine, Component.literal("a new spread after the map"));
+		helper.assertValueEqual(both.plateAt(1).id(), village, Component.literal("the first map stays"));
+		helper.assertValueEqual(pages(second).get(4), "About the mine", Component.literal("later notes move on by a spread"));
+		helper.succeed();
+	}
+
+	/** The table turns the book a map goes into, and shears cut a map back out of an atlas. */
+	@GameTest
+	public void cuttingMapsOut(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+		MapId village = newMap(level, origin);
+		MapId mine = newMap(level, origin.offset(512, 0, 0));
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+
+		// A book written to its fourth page opens there; turned back a spread, the map goes in after the first.
+		ItemStack notes = new ItemStack(Items.WRITABLE_BOOK);
+		notes.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(Filterable.passThrough("One"),
+				Filterable.passThrough("Two"), Filterable.passThrough("Three"), Filterable.passThrough("Four"))));
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(village));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(notes);
+		Atlas atEnd = Atlas.read(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem()).orElseThrow();
+		helper.assertValueEqual(atEnd.plateAt(4).id(), village, Component.literal("after the last spread"));
+		helper.assertTrue(menu.clickMenuButton(player, 1), Component.literal("turned back"));
+		Atlas turned = Atlas.read(menu.getSlot(CartographyTableMenu.RESULT_SLOT).getItem()).orElseThrow();
+		helper.assertValueEqual(turned.plateAt(2).id(), village, Component.literal("after the first spread, once turned back"));
+
+		// An atlas of two maps, left open at the second, with shears: the second map comes out.
+		ItemStack two = Atlas.stitch(Atlas.stitch(new ItemStack(Items.WRITABLE_BOOK), mapItem(village), level.registryAccess()), mapItem(mine),
+				level.registryAccess());
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(ItemStack.EMPTY);
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(two);
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.SHEARS));
+		Slot result = menu.getSlot(CartographyTableMenu.RESULT_SLOT);
+		helper.assertValueEqual(result.getItem().get(DataComponents.MAP_ID), mine, Component.literal("the map of the bookmarked spread"));
+		ItemStack taken = result.remove(1);
+		result.onTake(player, taken);
+		Atlas left = Atlas.read(menu.getSlot(CartographyTableMenu.MAP_SLOT).getItem()).orElseThrow();
+		helper.assertFalse(left.contains(mine), Component.literal("cut out of the atlas"));
+		helper.assertTrue(left.contains(village), Component.literal("the other map stays"));
+		helper.assertValueEqual(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem().getDamageValue(), 1, Component.literal("the shears wear"));
+		helper.assertTrue(result.getItem().isEmpty(), Component.literal("nothing more until the page turns"));
+		menu.clickMenuButton(player, 1);
+		helper.assertValueEqual(result.getItem().get(DataComponents.MAP_ID), village, Component.literal("turned back, the first map"));
 		helper.succeed();
 	}
 
@@ -570,6 +894,180 @@ public class MapPlusGameTest {
 		helper.assertValueEqual(back.get(DataComponents.MAP_ID), mapId, Component.literal("map id"));
 		helper.assertValueEqual(back.getHoverName().getString(), "Village", Component.literal("map name"));
 		helper.assertValueEqual(pages(atlasStack).getFirst(), "Village", Component.literal("map page text without the mod"));
+		helper.succeed();
+	}
+
+	/** A walked trail claims itself and the land it closes in, but never another nation's land. */
+	@GameTest
+	public void walkedBoundsClaimWhatTheyCloseIn(GameTestHelper helper) {
+		// A loop 40 blocks across, back to where it began, around a small patch of another nation's land.
+		int[] loop = {0, 0, 40, 0, 40, 40, 0, 40, 0, 0};
+		Claim claim = Claim.annex(loop, (x, z) -> false, (x, z) -> x >= 30 && x < 34 && z >= 30 && z < 34);
+		helper.assertTrue(claim.holds(20, 20), Component.literal("the land inside the loop"));
+		helper.assertTrue(claim.holds(40, 20), Component.literal("the trail itself"));
+		helper.assertFalse(claim.holds(60, 20), Component.literal("the land outside"));
+		helper.assertFalse(claim.holds(31, 31), Component.literal("another nation's land inside the loop"));
+		Claim decoded = Claim.CODEC.parse(NbtOps.INSTANCE, Claim.CODEC.encodeStart(NbtOps.INSTANCE, claim).getOrThrow()).getOrThrow();
+		helper.assertValueEqual(decoded.area(), claim.area(), Component.literal("a claim saved and read back"));
+
+		// A trail that loops nowhere takes only itself.
+		Claim line = Claim.annex(new int[] {0, 0, 40, 0}, (x, z) -> false, (x, z) -> false);
+		helper.assertTrue(line.holds(20, 0), Component.literal("the trail"));
+		helper.assertFalse(line.holds(20, 20), Component.literal("nothing beside it"));
+
+		// Out of the nation's own land and back into it closes in the land between.
+		Claim back = Claim.annex(new int[] {0, 0, 0, 40, 40, 40, 40, 0}, (x, z) -> z < 2, (x, z) -> false);
+		helper.assertTrue(back.holds(20, 20), Component.literal("land closed in by the trail and the nation's own land"));
+		helper.succeed();
+	}
+
+	/**
+	 * With walking the bounds turned on, wearing a named banner walks the bounds
+	 * of land; planted, it claims them, and the map in hand shows the trail.
+	 */
+	@GameTest
+	public void marchingBannersClaimLand(GameTestHelper helper) {
+		boolean was = MapPlusConfig.get().walkingBounds;
+		MapPlusConfig.get().walkingBounds = true;
+		try {
+			marchAndClaim(helper);
+		} finally {
+			MapPlusConfig.get().walkingBounds = was;
+		}
+	}
+
+	private void marchAndClaim(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		ItemStack banner = new ItemStack(Items.BANNER.pick(DyeColor.LIME));
+		banner.set(DataComponents.CUSTOM_NAME, Component.literal("Limeland"));
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		player.setItemSlot(EquipmentSlot.HEAD, banner);
+		BlockPos start = helper.absolutePos(new BlockPos(1, 1, 1));
+		int x = start.getX();
+		int z = start.getZ();
+		MapId mapId = newMap(level, start);
+		MapItemSavedData map = level.getMapData(mapId);
+		map.getHoldingPlayer(player);
+		map.getUpdatePacket(mapId, player);
+
+		int[][] walk = {{0, 0}, {24, 0}, {24, 24}, {0, 24}, {0, 0}};
+		for (int[] step : walk) {
+			player.setPos(x + step[0] + 0.5, start.getY(), z + step[1] + 0.5);
+			Marches.step(player);
+		}
+		Bounds bounds = Bounds.read(player.getItemBySlot(EquipmentSlot.HEAD));
+		helper.assertTrue(bounds != null && bounds.closed(), Component.literal("back at the start, the bounds are walked"));
+
+		// The map held shows the trail, dashed, in the banner's color.
+		byte lime = DyeColor.LIME.getMapColor().getPackedId(MapColor.Brightness.NORMAL);
+		MapItemSavedData.MapPatch patch = firstPatch(helper, map, mapId, player);
+		boolean trail = false;
+		for (int i = 0; i < patch.width(); i++) {
+			trail |= patch.mapColors()[i + (MapPixels.pixelZ(map, z) - patch.startY()) * patch.width()] == lime;
+		}
+		helper.assertTrue(trail, Component.literal("the trail shows on the map in hand"));
+
+		BlockPos post = helper.absolutePos(new BlockPos(5, 1, 5));
+		AbstractBannerBlock limeBanner = (AbstractBannerBlock) ((BlockItem) Items.BANNER.pick(DyeColor.LIME)).getBlock();
+		helper.setBlock(new BlockPos(5, 1, 5), limeBanner);
+		Nations.placed(level, post, limeBanner, player, player.getItemBySlot(EquipmentSlot.HEAD));
+		Post planted = NationData.get(level.getServer()).posts().stream().filter(p -> p.pos().equals(post)).findFirst()
+				.orElseThrow(() -> helper.assertionException(Component.literal("the banner should be a post")));
+		helper.assertTrue(planted.claim().holds(x + 12, z + 12), Component.literal("the land inside the walked bounds"));
+		helper.assertFalse(planted.claim().holds(x + 40, z + 12), Component.literal("the land outside them"));
+		NationData.get(level.getServer()).remove(level.dimension(), post);
+		helper.succeed();
+	}
+
+	/** A map shows a nation's land only once the nation's banner is on it: pinned at the table, or marked from the banner. */
+	@GameTest
+	public void bordersShowOnceTheBannerIsOnTheMap(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
+		helper.setBlock(new BlockPos(2, 1, 2), ((BlockItem) Items.BANNER.pick(DyeColor.ORANGE)).getBlock());
+		NationData data = NationData.get(level.getServer());
+		data.put(new Post(level.dimension(), at, DyeColor.ORANGE, List.of(), "Orangeland"));
+
+		MapId pinnedId = newMap(level, at);
+		MapItemSavedData pinned = level.getMapData(pinnedId);
+		java.util.Arrays.fill(pinned.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		int held = MapPixels.pixelX(pinned, at.getX()) + MapPixels.pixelZ(pinned, at.getZ()) * Ink.SIZE;
+		helper.assertTrue(Nations.territory(level.getServer(), pinnedId, pinned).isEmpty(), Component.literal("no borders before the banner is on the map"));
+		InkLayer layer = InkData.get(level.getServer()).getOrCreate(pinnedId);
+		layer.putMark(new Mark(layer.nextMarkId(), Mark.Kind.PIN, 10, 10, DyeColor.ORANGE, "Orangeland", Mark.SMALL, Optional.empty(), Ink.FULL, "",
+				List.of()));
+		helper.assertValueEqual(Nations.territory(level.getServer(), pinnedId, pinned).owner(held), 1,
+				Component.literal("the nation's land, once its banner is pinned on the map"));
+
+		// Vanilla marks a banner from the map only well inside the map's edge.
+		MapId markedId = newMap(level, at);
+		MapItemSavedData marked = level.getMapData(markedId);
+		java.util.Arrays.fill(marked.colors, MapColor.GRASS.getPackedId(MapColor.Brightness.NORMAL));
+		if (Math.abs(at.getX() + 0.5 - marked.centerX) <= 63 && Math.abs(at.getZ() + 0.5 - marked.centerZ) <= 63) {
+			helper.assertTrue(marked.toggleBanner(level, at), Component.literal("using the map on the banner marks it"));
+			helper.assertValueEqual(Nations.territory(level.getServer(), markedId, marked).owner(held), 1,
+					Component.literal("the nation's land, once its banner is marked on the map"));
+		}
+		data.remove(level.dimension(), at);
+		helper.succeed();
+	}
+
+	/** A book and quill's pages take sketches, under any writing, paid for with the ink in the other hand. */
+	@GameTest
+	public void sketchesAreDrawnInBooks(GameTestHelper helper) {
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		ItemStack book = new ItemStack(Items.WRITABLE_BOOK);
+		book.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(List.of(Filterable.passThrough("Notes"))));
+		player.setItemInHand(InteractionHand.MAIN_HAND, book);
+		player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.DYE.pick(DyeColor.GREEN), 2));
+		BitSet line = new BitSet(Sketch.PIXELS);
+		for (int x = 10; x < 60; x++) {
+			line.set(x + 20 * Sketch.WIDTH);
+		}
+		Sketching.draw(player, new SketchPayload(false, 1, Ink.FULL, false, line));
+		Atlas atlas = Atlas.read(player.getMainHandItem()).orElseThrow(() -> helper.assertionException(Component.literal("the book has a sketch")));
+		Sketch sketch = atlas.sketchAt(1);
+		helper.assertTrue(sketch != null && Ink.isPresent(sketch.get(30 + 20 * Sketch.WIDTH)) && Ink.dye(sketch.get(30 + 20 * Sketch.WIDTH)) == DyeColor.GREEN,
+				Component.literal("a green line on the empty page"));
+		helper.assertValueEqual(atlas.requiredPages(), 2, Component.literal("the sketched page is kept"));
+
+		Sketching.draw(player, new SketchPayload(false, 0, Ink.FULL, false, line));
+		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(0) != null, Component.literal("a sketch under the page's notes"));
+		helper.assertValueEqual(pages(player.getMainHandItem()).getFirst(), "Notes", Component.literal("the notes are kept"));
+
+		Sketching.draw(player, new SketchPayload(false, 1, Ink.FULL, true, line));
+		helper.assertTrue(Atlas.read(player.getMainHandItem()).orElseThrow().sketchAt(1) == null, Component.literal("erased, the page is empty again"));
+		helper.succeed();
+	}
+
+	/** Maps the player carries that border the one on the table lie around it on the sheet, and are drawn on from the table. */
+	@GameTest
+	public void neighboringMapsLieAroundTheTable(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		CartographyTableMenu menu = desk(helper, player);
+		MapId home = newMap(level, helper.absolutePos(BlockPos.ZERO));
+		MapItemSavedData homeMap = level.getMapData(home);
+		MapId east = newMap(level, new BlockPos(homeMap.centerX + Ink.SIZE, 0, homeMap.centerZ));
+		MapId farEast = newMap(level, new BlockPos(homeMap.centerX + 2 * Ink.SIZE, 0, homeMap.centerZ));
+		menu.getSlot(CartographyTableMenu.MAP_SLOT).set(mapItem(home));
+		menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.INK_SAC, 4));
+		player.getInventory().add(mapItem(east));
+		player.getInventory().add(mapItem(farEast));
+
+		int[] sheet = DrawingDesk.sheet(level, player, menu);
+		helper.assertValueEqual(sheet[4], home.id(), Component.literal("the table's map in the middle"));
+		helper.assertValueEqual(sheet[5], east.id(), Component.literal("the map of the land to the east beside it"));
+		helper.assertValueEqual(sheet[3], -1, Component.literal("nothing carried to the west"));
+		for (int id : sheet) {
+			helper.assertFalse(id == farEast.id(), Component.literal("a map two over isn't on the sheet"));
+		}
+
+		InkManager.draw(player, menu, level, new InkStrokePayload(1, east.id(), false, pixels(5, 6, 7)));
+		InkLayer layer = InkData.get(level.getServer()).find(east);
+		helper.assertTrue(layer != null && Ink.isPresent(layer.get(6)), Component.literal("drawn on the carried map from the table"));
+		InkManager.draw(player, menu, level, new InkStrokePayload(2, farEast.id(), false, pixels(5)));
+		helper.assertTrue(InkData.get(level.getServer()).find(farEast) == null, Component.literal("nothing drawn on a map off the sheet"));
 		helper.succeed();
 	}
 }

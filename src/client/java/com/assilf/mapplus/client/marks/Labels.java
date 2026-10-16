@@ -6,10 +6,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.material.MapColor;
-import net.minecraft.world.level.saveddata.maps.MapId;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /** How labels look on a map: plain text in the ink's own map color, centered on its spot. */
 public final class Labels {
@@ -39,17 +35,6 @@ public final class Labels {
 		float centerX = Math.clamp(x + 0.5F, halfWidth + 1, 127 - halfWidth);
 		float centerY = Math.clamp(y + 0.5F, halfHeight + 1, 127 - halfHeight);
 		return new Fit(scale, centerX, centerY, width);
-	}
-
-	/** The labels to draw on a map, without one being edited. */
-	public static List<Mark> shown(MapId mapId) {
-		List<Mark> labels = new ArrayList<>();
-		for (Mark mark : ClientMarks.get(mapId)) {
-			if (mark.isLabel() && !ClientMarks.isHidden(mapId.id(), mark)) {
-				labels.add(mark);
-			}
-		}
-		return labels;
 	}
 
 	public static int color(DyeColor dye) {

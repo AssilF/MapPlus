@@ -16,6 +16,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.ResultContainer;
 import net.minecraft.world.inventory.Slot;
@@ -40,7 +41,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <li>an empty map in the first slot is a blank canvas; the drawing on it is the result</li>
  * <li>a map plus a book and quill (or an atlas) stitches the map into the book</li>
  * <li>a map plus honeycomb seals its ink; a map plus an axe scrapes the seal off</li>
- * <li>shift-clicking dyes, ink sacs, water bottles, honeycomb, axes and books puts them in the second slot</li>
+ * <li>an atlas on top and shears in the second slot cut the map of the shown spread out</li>
+ * <li>the book being stitched into, or cut from, turns with the menu's buttons, as a lectern's does</li>
+ * <li>shift-clicking dyes, ink sacs, water bottles, honeycomb, axes, shears and books puts them in the second slot</li>
  * </ul>
  * Players without the mod get the vanilla table.
  */
@@ -67,6 +70,18 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	@Unique
 	private MapId mapplus$canvas;
 
+	/** The page of the book on the table, kept by the server and sent like a lectern's page, to desk players only. */
+	@Unique
+	private final DataSlot mapplus$page = DataSlot.standalone();
+
+	/** The book the page belongs to, so a new book opens at its own bookmark. */
+	@Unique
+	private int mapplus$pageBook;
+
+	/** Whether a map was just cut out; the result stays empty until the page turns, so a Shift-click cuts only one. */
+	@Unique
+	private boolean mapplus$cut;
+
 	protected CartographyTableMenuMixin(MenuType<?> type, int containerId) {
 		super(type, containerId);
 	}
@@ -77,6 +92,11 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 		mapplus$desk = MapPlus.hasMod(inventory.player);
 		((DeskSlot) slots.get(CartographyTableMenu.MAP_SLOT)).mapplus$setDesk(this);
 		((DeskSlot) slots.get(CartographyTableMenu.ADDITIONAL_SLOT)).mapplus$setDesk(this);
+		mapplus$page.set(-1);
+		// Both sides build a desk knowing it's one, so only desk menus carry the page.
+		if (mapplus$desk) {
+			addDataSlot(mapplus$page);
+		}
 		// A drawing left unfinished at another table carries on here.
 		Integer pending = mapplus$desk ? inventory.player.getAttached(InkManager.PENDING_CANVAS) : null;
 		if (pending != null && inventory.player.level().getMapData(new MapId(pending)) != null) {
@@ -109,6 +129,49 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	}
 
 	@Override
+	public void mapplus$cutDone() {
+		mapplus$cut = true;
+	}
+
+	@Override
+	public int mapplus$page() {
+		return mapplus$page.get();
+	}
+
+	/** The book whose pages the table turns: the one being stitched into, or the atlas a map is cut from. */
+	@Unique
+	private ItemStack mapplus$book() {
+		ItemStack top = container.getItem(CartographyTableMenu.MAP_SLOT);
+		if (Atlas.canCut(top)) {
+			return top;
+		}
+		ItemStack second = container.getItem(CartographyTableMenu.ADDITIONAL_SLOT);
+		return second.is(Items.WRITABLE_BOOK) && top.is(Items.FILLED_MAP) ? second : ItemStack.EMPTY;
+	}
+
+	/** Turns the book on the table a spread back (1) or on (2), as a lectern's buttons do. */
+	@Override
+	public boolean clickMenuButton(Player player, int id) {
+		ItemStack book = mapplus$book();
+		if (!mapplus$desk || book.isEmpty() || (id != 1 && id != 2)) {
+			return false;
+		}
+		Atlas atlas = Atlas.read(book).orElse(Atlas.EMPTY);
+		int count = Atlas.pages(book, atlas).size();
+		// Stitching may go one spread past the end; cutting only through the book.
+		int last = Atlas.canCut(container.getItem(CartographyTableMenu.MAP_SLOT)) ? Math.max(0, count - 1) & ~1 : count & ~1;
+		int page = Math.max(0, mapplus$page.get()) & ~1;
+		int turned = Math.clamp(page + (id == 2 ? 2 : -2), 0, last);
+		if (turned == page && mapplus$page.get() == page) {
+			return false;
+		}
+		mapplus$page.set(turned);
+		mapplus$cut = false;
+		slotsChanged(container);
+		return true;
+	}
+
+	@Override
 	public MapId mapplus$canvas() {
 		return mapplus$canvas;
 	}
@@ -134,7 +197,7 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	@Inject(method = "removed", at = @At("HEAD"))
 	private void mapplus$keepDrawing(Player player, CallbackInfo ci) {
 		if (!mapplus$desk || mapplus$canvas == null || !(player instanceof ServerPlayer serverPlayer)
-				|| !container.getItem(CartographyTableMenu.MAP_SLOT).is(Items.MAP)) {
+				|| !DrawingDesk.isBlankCanvas(container.getItem(CartographyTableMenu.MAP_SLOT))) {
 			return;
 		}
 		ItemStack drawing = DrawingDesk.canvasItem(mapplus$canvas);
@@ -151,7 +214,7 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 	/** With an empty map in the first slot, the result is the drawing on it, whatever the second slot holds. */
 	@Inject(method = "slotsChanged", at = @At("HEAD"), cancellable = true)
 	private void mapplus$showCanvas(Container changed, CallbackInfo ci) {
-		if (!mapplus$desk || !container.getItem(CartographyTableMenu.MAP_SLOT).is(Items.MAP)) {
+		if (!mapplus$desk || !DrawingDesk.isBlankCanvas(container.getItem(CartographyTableMenu.MAP_SLOT))) {
 			return;
 		}
 		ci.cancel();
@@ -167,17 +230,37 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 
 	@Inject(method = "setupResultSlot", at = @At("HEAD"), cancellable = true)
 	private void mapplus$deskResults(ItemStack map, ItemStack additional, ItemStack result, CallbackInfo ci) {
+		boolean cutting = mapplus$desk && Atlas.canCut(map);
 		boolean book = additional.is(Items.WRITABLE_BOOK);
 		boolean seal = additional.is(Items.HONEYCOMB) || additional.is(ItemTags.AXES);
-		if (!book && !seal) {
+		if (!book && !seal && !cutting) {
 			return;
 		}
 		ci.cancel();
 		if (!mapplus$desk) {
 			return;
 		}
+		// A new book on the table opens at its bookmark; an atlas to cut from, at the first map from there on.
+		ItemStack pageBook = cutting ? map : additional;
+		int key = ItemStack.hashItemAndComponents(pageBook.copyWithCount(1)) * 31 + (cutting ? 1 : 0);
+		if (cutting && mapplus$cut) {
+			// The atlas just lost a map: it's the same book, still open at the gap.
+			mapplus$pageBook = key;
+		} else if (book || cutting) {
+			if (key != mapplus$pageBook || mapplus$page.get() < 0) {
+				mapplus$pageBook = key;
+				Atlas atlas = Atlas.read(pageBook).orElse(Atlas.EMPTY);
+				mapplus$page.set(cutting ? atlas.firstMapSpread(Math.max(0, atlas.selected())) : Atlas.stitchPage(pageBook));
+			}
+		}
+		int page = mapplus$page.get();
 		access.execute((level, pos) -> {
-			ItemStack out = book ? Atlas.stitch(additional, map, level.registryAccess()) : mapplus$sealResult(level, map, additional);
+			ItemStack out;
+			if (cutting) {
+				out = additional.is(Items.SHEARS) && !mapplus$cut ? Atlas.cutResult(map, page, level.registryAccess()) : ItemStack.EMPTY;
+			} else {
+				out = book ? Atlas.stitch(additional, map, level.registryAccess(), page) : mapplus$sealResult(level, map, additional);
+			}
 			if (!ItemStack.matches(out, result)) {
 				resultContainer.setItem(CartographyTableMenu.RESULT_SLOT, out);
 				broadcastChanges();
@@ -211,7 +294,7 @@ public abstract class CartographyTableMenuMixin extends AbstractContainerMenu im
 		}
 		Slot slot = slots.get(index);
 		ItemStack stack = slot.getItem();
-		if (stack.isEmpty() || !(stack.is(Items.WRITABLE_BOOK) || InkMaterial.fitsTable(stack))) {
+		if (stack.isEmpty() || !(stack.is(Items.WRITABLE_BOOK) || stack.is(Items.SHEARS) || InkMaterial.fitsTable(stack))) {
 			return;
 		}
 		ItemStack copy = stack.copy();

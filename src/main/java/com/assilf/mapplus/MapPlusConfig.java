@@ -27,7 +27,7 @@ public final class MapPlusConfig {
 	public boolean markingNeedsLoom = true;
 	/** Labels one map can carry. */
 	public int maxLabelsPerMap = 32;
-	/** Pins one map can carry. */
+	/** Pins and icons one map can carry. */
 	public int maxPinsPerMap = 32;
 	/** Only whoever sealed a map, its maker or an operator can scrape the seal off. */
 	public boolean sealsAreOwned = true;
@@ -44,6 +44,50 @@ public final class MapPlusConfig {
 	public boolean spyglassGeneratesChunks = true;
 	/** Chunks the spyglass may load or generate per tick, per player. */
 	public int surveyChunksPerTick = 2;
+	/** Whether players with the mod see the land past their render distance while looking through a spyglass. */
+	public boolean spyglassFarView = true;
+	/** How far the far view reaches, as a multiple of the server view distance. */
+	public double farViewMultiplier = 3.0;
+	/** Whether a spyglass with a compass in the other hand points out the nearest biome its holder hasn't been to. */
+	public boolean spyglassWayfinding = true;
+
+	/** Whether named banners put up in the world are nations' border posts. */
+	public boolean nations = true;
+	/** How far a border post holds land, in blocks. */
+	public int postReach = 48;
+	/** Whether maps show nations' borders and land. */
+	public boolean nationsOnMaps = true;
+	/**
+	 * Whether a map shows a nation's land only once the nation's banner is on it:
+	 * marked by using the map on one of its posts, or pinned at the table.
+	 */
+	public boolean bordersNeedBanners = true;
+	/**
+	 * Whether named banners can be worn on the head to walk the bounds of land,
+	 * and claim it when planted. Experimental: off until it's reworked.
+	 */
+	public boolean walkingBounds = false;
+	/** How far a worn named banner remembers the bounds it walks, in blocks. */
+	public int boundsLength = 2048;
+	/** Whether players are told in the action bar when they cross a border. */
+	public boolean nationMessages = true;
+
+	/** Whether a book and quill can be sketched in, holding ink in the other hand. */
+	public boolean sketching = true;
+	/** How many pages of one book can hold sketches. */
+	public int sketchPages = 16;
+
+	/** Whether a map in an item frame can be painted where it hangs, with a pen in one hand and ink in the other. */
+	public boolean framePainting = true;
+
+	/** Whether an empty map used underground is a cave map, drawing what its holder sees around them. */
+	public boolean caveMaps = true;
+	/** How far around its holder a cave map draws what they can see, in blocks. */
+	public int caveMapReach = 20;
+	/** How far an amethyst shard's ring reveals the land on a held map, in blocks; an echo shard's reaches twice as far. */
+	public int echoReach = 24;
+	/** Ticks before a shard can ring again. */
+	public int echoCooldown = 40;
 
 	private static MapPlusConfig instance = new MapPlusConfig();
 
@@ -71,6 +115,14 @@ public final class MapPlusConfig {
 		config.surveyPixelsPerTick = Math.max(0, config.surveyPixelsPerTick);
 		config.surveyRangeMultiplier = Math.max(1.0, config.surveyRangeMultiplier);
 		config.surveyChunksPerTick = Math.max(0, config.surveyChunksPerTick);
+		config.farViewMultiplier = Math.clamp(config.farViewMultiplier, 1.0, 8.0);
+		config.postReach = Math.clamp(config.postReach, 1, 1024);
+		// A march no longer than this closes in no more land than one claim can hold.
+		config.boundsLength = Math.clamp(config.boundsLength, 0, 4096);
+		config.caveMapReach = Math.clamp(config.caveMapReach, 1, 64);
+		config.echoReach = Math.clamp(config.echoReach, 1, 64);
+		config.echoCooldown = Math.max(0, config.echoCooldown);
+		config.sketchPages = Math.clamp(config.sketchPages, 0, 50);
 		// Together they stay within what one map's marks packet can carry.
 		config.maxLabelsPerMap = Math.clamp(config.maxLabelsPerMap, 0, 512);
 		config.maxPinsPerMap = Math.clamp(config.maxPinsPerMap, 0, 512);

@@ -170,6 +170,49 @@ public final class MapPixels {
 		return !fluid.isEmpty() && !state.isFaceSturdy(level, pos, Direction.UP) ? fluid.createLegacyBlock() : state;
 	}
 
+	/** How far below a cave map's level its floor is looked for, in blocks. */
+	private static final int CAVE_FLOOR_DEPTH = 24;
+
+	/**
+	 * The packed map color for a pixel of a cave map, which shows one level of
+	 * the world as a floor plan: the floor under open space, shaded darker the
+	 * further down it is, and rock as the darkest shade of itself. Returns -1 if
+	 * the pixel's chunk isn't available.
+	 */
+	public static int caveColor(ServerLevel level, ChunkLookup chunks, MapItemSavedData map, int px, int pz, int depth) {
+		int s = scaleBlocks(map);
+		int x = worldX(map, px) + s / 2;
+		int z = worldZ(map, pz) + s / 2;
+		ChunkAccess chunk = chunks.get(x >> 4, z >> 4);
+		if (chunk == null) {
+			return -1;
+		}
+		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, depth, z);
+		BlockState state = chunk.getBlockState(pos);
+		MapColor color = state.getMapColor(level, pos);
+		if (color != MapColor.NONE && state.getFluidState().isEmpty() && !state.getCollisionShape(level, pos).isEmpty()) {
+			return color.getPackedId(MapColor.Brightness.LOWEST) & 0xFF;
+		}
+		int bottom = Math.max(level.getMinY(), depth - CAVE_FLOOR_DEPTH);
+		for (int y = depth; y >= bottom; y--) {
+			pos.setY(y);
+			state = chunk.getBlockState(pos);
+			color = state.getMapColor(level, pos);
+			if (color == MapColor.NONE) {
+				continue;
+			}
+			if (!state.getFluidState().isEmpty()) {
+				state = surfaceOfFluid(level, state, pos);
+				color = state.getMapColor(level, pos);
+			}
+			int drop = depth - y;
+			MapColor.Brightness brightness = drop <= 1 ? MapColor.Brightness.HIGH : drop <= 4 ? MapColor.Brightness.NORMAL : MapColor.Brightness.LOW;
+			return color.getPackedId(brightness) & 0xFF;
+		}
+		// A drop too deep to see the bottom of.
+		return MapColor.COLOR_BLACK.getPackedId(MapColor.Brightness.LOWEST) & 0xFF;
+	}
+
 	public static ChunkPos chunkOfPixel(MapItemSavedData map, int px, int pz) {
 		return new ChunkPos(worldX(map, px) >> 4, worldZ(map, pz) >> 4);
 	}

@@ -26,8 +26,10 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -107,6 +109,16 @@ public final class InkManager {
 	static boolean acknowledge(ServerPlayer player, int seq) {
 		Session session = session(player);
 		session.ack = Math.max(session.ack, seq);
+		return allowEdit(player);
+	}
+
+	/**
+	 * Whether a player may make another stroke now, at the table, in a book or
+	 * on a frame: as often as drawing ever needs, but no more, so a client
+	 * can't flood the server with edits.
+	 */
+	public static boolean allowEdit(ServerPlayer player) {
+		Session session = session(player);
 		// Counted in server ticks, which go on even while the game's tick is frozen.
 		session.refill(player.level().getServer().getTickCount());
 		if (session.edits < 1) {
@@ -138,7 +150,7 @@ public final class InkManager {
 			return;
 		}
 		Slot materialSlot = menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT);
-		InkMaterial material = InkMaterial.of(materialSlot.getItem());
+		InkMaterial material = payload.erase() ? InkMaterial.WATER : InkMaterial.of(materialSlot.getItem());
 		if (material == null) {
 			return;
 		}
@@ -148,10 +160,17 @@ public final class InkManager {
 		MapId mapId;
 		if (input.is(Items.FILLED_MAP)) {
 			mapId = input.get(DataComponents.MAP_ID);
-			if (mapId == null || mapId.id() != payload.mapId()) {
+			if (mapId == null) {
 				return;
 			}
-		} else if (input.is(Items.MAP)) {
+			if (mapId.id() != payload.mapId()) {
+				// Drawn across from the table's map onto a map the player carries beside it.
+				if (!DrawingDesk.inSheet(level, player, menu, payload.mapId())) {
+					return;
+				}
+				mapId = new MapId(payload.mapId());
+			}
+		} else if (DrawingDesk.isBlankCanvas(input)) {
 			mapId = DrawingDesk.of(menu).mapplus$canvas();
 			if (mapId == null ? payload.mapId() != InkStrokePayload.NEW_CANVAS : payload.mapId() != mapId.id() && payload.mapId() != InkStrokePayload.NEW_CANVAS) {
 				return;
@@ -167,15 +186,24 @@ public final class InkManager {
 		}
 
 		BitSet pixels = payload.pixels();
-		int cost = 0;
+		if (payload.erase()) {
+			// The other end of the pencil: erasing takes no water, and there's nothing to erase on a canvas not yet drawn on.
+			if (layer != null) {
+				erase(level, data, mapId, layer, pixels);
+			}
+			return;
+		}
+		int strength = payload.strength();
+		int quarters = material.quarters(strength);
+		int changed = 0;
 		for (int i = pixels.nextSetBit(0); i >= 0 && i < Ink.PIXELS; i = pixels.nextSetBit(i + 1)) {
 			byte ink = layer == null ? Ink.NONE : layer.get(i);
-			if (material.apply(ink) != ink) {
-				cost++;
+			if (material.apply(ink, strength) != ink) {
+				changed++;
 			}
 		}
 		Wallet wallet = new Wallet(player, material, materialSlot);
-		if (cost == 0 || !wallet.canAfford(payload.shape() ? cost : 1)) {
+		if (changed == 0 || !wallet.canAfford(payload.shape() ? (changed * quarters + 3) / 4 : 1)) {
 			return;
 		}
 
@@ -191,15 +219,21 @@ public final class InkManager {
 		int minY = Ink.SIZE;
 		int maxX = -1;
 		int maxY = -1;
+		// Paid a pixel's worth at a time; watered down dye pays a quarter of one per pixel.
+		int credit = 0;
 		for (int i = pixels.nextSetBit(0); i >= 0 && i < Ink.PIXELS; i = pixels.nextSetBit(i + 1)) {
 			byte ink = layer.get(i);
-			byte next = material.apply(ink);
+			byte next = material.apply(ink, strength);
 			if (next == ink) {
 				continue;
 			}
-			if (!wallet.spend()) {
-				break;
+			if (credit < quarters) {
+				if (!wallet.spend()) {
+					break;
+				}
+				credit += 4;
 			}
+			credit -= quarters;
 			layer.set(i, next);
 			int x = i % Ink.SIZE;
 			int y = i / Ink.SIZE;
@@ -210,6 +244,30 @@ public final class InkManager {
 		}
 		wallet.save();
 
+		if (maxX >= 0) {
+			data.setDirty();
+			MapItemSavedData map = level.getMapData(mapId);
+			if (map != null) {
+				markDirty(map, minX, minY, maxX, maxY);
+			}
+		}
+	}
+
+	private static void erase(ServerLevel level, InkData data, MapId mapId, InkLayer layer, BitSet pixels) {
+		int minX = Ink.SIZE;
+		int minY = Ink.SIZE;
+		int maxX = -1;
+		int maxY = -1;
+		for (int i = pixels.nextSetBit(0); i >= 0 && i < Ink.PIXELS; i = pixels.nextSetBit(i + 1)) {
+			if (!Ink.isPresent(layer.get(i))) {
+				continue;
+			}
+			layer.set(i, Ink.NONE);
+			minX = Math.min(minX, i % Ink.SIZE);
+			minY = Math.min(minY, i / Ink.SIZE);
+			maxX = Math.max(maxX, i % Ink.SIZE);
+			maxY = Math.max(maxY, i / Ink.SIZE);
+		}
 		if (maxX >= 0) {
 			data.setDirty();
 			MapItemSavedData map = level.getMapData(mapId);
@@ -264,6 +322,15 @@ public final class InkManager {
 			InkMaterial material = InkMaterial.of(menu.getSlot(CartographyTableMenu.ADDITIONAL_SLOT).getItem());
 			InkSupply supply = player.getAttachedOrElse(InkSupply.ATTACHMENT, InkSupply.EMPTY);
 			MapId canvas = DrawingDesk.of(menu).mapplus$canvas();
+			int[] sheet = DrawingDesk.sheet(player.level(), player, menu);
+			List<Integer> sheetIds = new ArrayList<>();
+			int sealedSheet = 0;
+			for (int i = 0; i < sheet.length; i++) {
+				sheetIds.add(sheet[i]);
+				if (sheet[i] >= 0 && InkData.get(server).isSealed(new MapId(sheet[i]))) {
+					sealedSheet |= 1 << i;
+				}
+			}
 			InkStatePayload state = new InkStatePayload(
 					session.ack,
 					canvas == null ? -1 : canvas.id(),
@@ -272,7 +339,9 @@ public final class InkManager {
 					material == null ? 1 : material.perItem(),
 					isFree(player),
 					DrawingDesk.mayMark(menu),
-					scrapable
+					scrapable,
+					List.copyOf(sheetIds),
+					sealedSheet
 			);
 			// Only the fill tool needs the ink itself; it's sent while the bucket is in hand.
 			if (InkTool.of(menu.getCarried()) == InkTool.FILL) {
@@ -311,9 +380,10 @@ public final class InkManager {
 	}
 
 	/**
-	 * Washes all ink off a map, as when it is dipped into a water cauldron.
+	 * Waters all of a map's ink and labels down one step, as when it is dipped
+	 * into a water cauldron: four dips wash full ink off.
 	 *
-	 * @return whether there was ink to wash off
+	 * @return whether there was ink to water down
 	 */
 	public static boolean wash(MinecraftServer server, MapId mapId) {
 		InkData data = InkData.get(server);
@@ -321,7 +391,7 @@ public final class InkManager {
 		if (layer == null || layer.isSealed() || !layer.hasInk()) {
 			return false;
 		}
-		layer.clear();
+		layer.fade();
 		data.setDirty();
 
 		MapItemSavedData map = server.overworld().getMapData(mapId);
@@ -340,6 +410,7 @@ public final class InkManager {
 	public static void carryInk(ServerLevel level, MapId from, MapId to) {
 		InkData data = InkData.get(level.getServer());
 		data.setMaker(to, data.maker(from));
+		data.setDepth(to, data.depth(from));
 		InkLayer source = data.find(from);
 		MapItemSavedData oldMap = level.getMapData(from);
 		MapItemSavedData newMap = level.getMapData(to);
@@ -379,7 +450,7 @@ public final class InkManager {
 	}
 
 	/** Makes every player who sees this map receive these pixels again. */
-	private static void markDirty(MapItemSavedData map, int minX, int minY, int maxX, int maxY) {
+	static void markDirty(MapItemSavedData map, int minX, int minY, int maxX, int maxY) {
 		MapItemSavedDataAccessor accessor = (MapItemSavedDataAccessor) map;
 		accessor.mapplus$setColorsDirty(minX, minY);
 		accessor.mapplus$setColorsDirty(maxX, maxY);
@@ -391,16 +462,67 @@ public final class InkManager {
 	 * ink left in it is kept on the player, so taking the stack out and putting
 	 * it back loses nothing.
 	 */
+	/** Where ink is paid from: the table's second slot, or a hand. */
+	interface InkSource {
+		ItemStack getItem();
+
+		void remove(int count);
+
+		void set(ItemStack stack);
+
+		static InkSource of(Slot slot) {
+			return new InkSource() {
+				@Override
+				public ItemStack getItem() {
+					return slot.getItem();
+				}
+
+				@Override
+				public void remove(int count) {
+					slot.remove(count);
+				}
+
+				@Override
+				public void set(ItemStack stack) {
+					slot.set(stack);
+				}
+			};
+		}
+
+		static InkSource of(Player player, net.minecraft.world.InteractionHand hand) {
+			return new InkSource() {
+				@Override
+				public ItemStack getItem() {
+					return player.getItemInHand(hand);
+				}
+
+				@Override
+				public void remove(int count) {
+					player.getItemInHand(hand).shrink(count);
+				}
+
+				@Override
+				public void set(ItemStack stack) {
+					player.setItemInHand(hand, stack);
+				}
+			};
+		}
+	}
+
 	static final class Wallet {
 		private final Player player;
 		private final InkMaterial material;
-		private final Slot source;
+		private final InkSource source;
 		private final boolean free;
 		private final InkSupply supply;
 		/** Ink left in the top item, or 0 if it hasn't been started. */
 		private int charge;
 
 		Wallet(Player player, InkMaterial material, Slot source) {
+			this(player, material, InkSource.of(source));
+		}
+
+		Wallet(Player player, InkMaterial material, InkSource source) {
 			this.player = player;
 			this.material = material;
 			this.source = source;

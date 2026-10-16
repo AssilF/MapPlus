@@ -21,7 +21,8 @@ public enum InkTool {
 	FILL("fill", stack -> stack.is(Items.BUCKET), new ItemStack(Items.BUCKET), 1, false),
 	BORDER("border", stack -> stack.is(Items.IRON_CHAIN), new ItemStack(Items.IRON_CHAIN), 1, true),
 	LABEL("label", stack -> stack.is(ItemTags.SIGNS) || stack.is(ItemTags.HANGING_SIGNS), new ItemStack(Items.OAK_SIGN), 1, true),
-	PIN("pin", stack -> stack.is(ItemTags.BANNERS), new ItemStack(Items.BANNER.pick(DyeColor.WHITE)), 1, true);
+	PIN("pin", stack -> stack.is(ItemTags.BANNERS), new ItemStack(Items.BANNER.pick(DyeColor.WHITE)), 1, true),
+	ICON("icon", stack -> stack.is(ItemTags.DECORATED_POT_SHERDS), new ItemStack(Items.SHELTER_POTTERY_SHERD), 1, true);
 
 	private final String name;
 	private final Predicate<ItemStack> item;
@@ -69,9 +70,28 @@ public enum InkTool {
 		return marking;
 	}
 
-	/** Whether the tool lays ink on the map's pixels, as opposed to placing labels and pins. */
+	/** Whether the tool lays ink on the map's pixels, as opposed to placing labels, pins and icons. */
 	public boolean draws() {
-		return this != LABEL && this != PIN;
+		return mark() == null;
+	}
+
+	/** The kind of mark this tool places, moves and resizes, or null for a drawing tool. */
+	public Mark.Kind mark() {
+		return switch (this) {
+			case LABEL -> Mark.Kind.LABEL;
+			case PIN -> Mark.Kind.PIN;
+			case ICON -> Mark.Kind.ICON;
+			default -> null;
+		};
+	}
+
+	/** The tool that places, moves and resizes a kind of mark. */
+	public static InkTool of(Mark.Kind kind) {
+		return switch (kind) {
+			case LABEL -> LABEL;
+			case PIN -> PIN;
+			case ICON -> ICON;
+		};
 	}
 
 	public Component title() {

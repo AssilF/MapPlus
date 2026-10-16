@@ -193,11 +193,41 @@ While looking through a spyglass with a map in the other hand:
 - PNG export of an annotated map or atlas.
 - Client-only mode (later).
 
+## Where MapPlus is going
+
+From the point of view of an SMP player who has kept a map wall in every town
+hall since 1.4:
+
+- **Maps are a server's shared memory.** Bases, roads, mines, farms, claims and
+  plans all end up on maps, and maps end up on walls. MapPlus makes those walls
+  alive: you paint on them where they hang, nations' borders appear on them
+  once they know the nation, glow ink shines on them at night, and Foresight
+  carries them back out onto the land so builders can build to the plan.
+- **Vanilla first.** No new items or blocks: vanilla items gain new uses that
+  read the way they already do (a feather writes, a bucket fills, honeycomb
+  seals, a banner claims, a sherd is a symbol, an amethyst shard rings). Every
+  mark costs vanilla resources. Vanilla screens are extended, not replaced, and
+  as much as possible works for players without the mod. Removing the mod
+  leaves every map as it was.
+- **The table is a drafting table.** The cartography table window grows into
+  one: the map large, tools as items on the cursor, the inks you carry in a
+  palette beside it, hints kept out of the drawing. Next it takes **several
+  maps at once**: put the maps of neighboring areas on the table and they tile
+  into one big sheet, to draw a road or a border straight across them, zoomed
+  out to see the whole and in to work on a part. An atlas on the table opens as
+  the book it is, to pick its pages and cut maps back out.
+- **What opens doors:** framed painting for map art and pixel art on walls;
+  sketches in books for builders' notes; glow ink for night maps; banners for
+  politics; sherds for legends; cave maps and the echo for mining expeditions;
+  the spyglass for scouting; Foresight for building to a plan.
+
 ## Next: tools, painting and writing
 
 Planned from playtesting feedback. Each part starts with what was asked and
 what changed after review, then the design. **Built so far:** tools on the
-cursor, labels, pins and borders (the planning desk), and owned seals; see
+cursor, labels, pins and borders (the planning desk), owned seals, watering
+down and tints, sherd icons, banner designs, sizes and paper canvases; see
+[Built: tints and icons](#built-tints-and-icons) and
 [Built: the planning desk](#built-the-planning-desk) for where the build
 differs from the plan.
 
@@ -624,12 +654,282 @@ takes ink from a hand. Effort: medium.
 ### Order
 
 1. ~~Tools on the cursor~~ (built)
-2. ~~Labels, pins and borders, unlocked by a loom~~ (built); zones next
-3. Choosing the page and cutting maps out, with the book on the desk
-4. Painting framed maps
-5. One ink file per map, then watering down
-6. Sketches: in the hand with the quill only; at the table, on the book on the
-   desk, with all the table's tools
+2. ~~Labels, pins and borders, unlocked by a loom~~ (built)
+3. ~~Watering down, tints, sherd icons, banner designs, sizes, paper canvases~~
+   (built; see [Built: tints and icons](#built-tints-and-icons))
+4. ~~The drafting table~~ (built; see
+   [Built: the drafting table](#built-the-drafting-table))
+5. ~~Choosing the page and cutting maps out, with the book on the desk~~ (built)
+6. Atlases shown like maps: ~~held~~ (built: any book is held open); in an
+   item frame, the open map shows as a framed map does
+7. ~~Painting framed maps~~ (built, on walls)
+8. One ink file per map
+9. Sketches: ~~in the hand with the quill only~~ (built; see
+   [Built: walking the bounds, maps that know nations, and sketchbooks](#built-walking-the-bounds-maps-that-know-nations-and-sketchbooks));
+   at the table, on the book on the desk, with all the table's tools. A sketch
+   fills the page's writing area as a vanilla book lays it out, so it sits
+   where text would.
+
+### Built: books open in hand, on lecterns and on the desk
+
+- **Held open:** a book and quill or written book in hand goes down vanilla's
+  held-map path (`FirstPersonHandsAndItemsRenderer`: the map check is
+  `has(MAP_ID)`, and books join it), so it's held in both hands when the other
+  is free and in one otherwise. Instead of the map, the spread is drawn as the
+  book screen lays it out, in book screen pixels (`OpenBook`): the page texture,
+  text, sketches (one texture per sketch, cached) and stitched maps through the
+  map renderer. It opens where the book was last closed, remembered by the
+  client per book, else the atlas's bookmark, else the first spread.
+- **Lecterns:** vanilla never sends a lectern's book. `LecternBooks` sends
+  players with the mod each lectern's book within 24 blocks once, then only its
+  page as it turns (`LecternBookPayload`). Within 12 blocks the lectern draws
+  the spread across its sloped top, in place of the little book, centered where
+  the model's top is.
+- **The book on the desk**, as planned, with these choices: the bookmark is the
+  atlas's `selected` page, now any page (old atlases read as before: exploring
+  uses the map of that spread); any book and quill gets one when closed, which
+  makes plain books carry atlas data without maps. The table's page is a data
+  slot added only to desk menus (both sides know), turned with menu buttons 1
+  and 2. A new book on the table opens at its bookmark, or its last page; an
+  atlas to cut from opens at the first map from its bookmark on. While
+  stitching, the desk shows the result at its new map; while cutting, the atlas
+  at the table's page. Shift-clicking shears puts them in the second slot.
+- **Still planned:** an atlas in an item frame showing its open map.
+
+### Built: smoother hands, joined turfs and the spyglass upgrades
+
+From the third round of playtesting:
+
+- **Sketchbooks:** what's drawn stays shown while the book is open, whatever the
+  book in hand has caught up to. The wheel sizes the pen (1 to 4 points); the
+  eraser is a broad circle; Shift and the right button wipe the page. The quill
+  is heard softly, now and then, not on every point.
+- **Framed painting** is driven by the client while use is held: once a tick it
+  sends where it aims (`FramePaintPayload`), and the server checks reach, the
+  frame and the hands as before. No arm swing; the sound is spaced out. Players
+  without the mod paint by repeated use, as before.
+- **The echo** rings an amethyst chord (resonance, then chimes a third and a
+  fifth apart), with echoes rippling out from points around the ring for a
+  second after; an echo shard adds the catalyst's bloom and a far-off thunder.
+- **Foresight** is worked out every other tick, out to 96 blocks, so it keeps
+  up while running; ink shimmers in waves going out. A key (O) cycles the whole
+  map, its edges only, and off.
+- **Joined turfs:** after the flood, each nation's separate stretches of land
+  reach out to join, from the largest: the cheapest way over open land, as far
+  as a post's reach, becomes theirs, three pixels wide. Water and other nations
+  are in the way. What a join closes in is then taken by surrounding, as before.
+- **Network:** sketch strokes share the per-player edit allowance of the table;
+  a wiped page goes as one bit per pixel. Framed painting is at most once a
+  tick per player, checked against reach.
+- **Far view** (the plan's map-style preview; streaming real chunks is left for
+  later): while scoping, players with the mod are sent the land past their
+  render distance along the line of sight, nearest first, eight chunks a tick:
+  each 2×2 blocks' top and map color (`FarViewPayload`). Chunks are loaded, or
+  generated if `spyglassGeneratesChunks`, in the background. The client draws
+  them as blocks of map color, shaded by slope as maps are, with cliffs between
+  cells, hazed with distance, fading in and out with the spyglass.
+- **Spyglass enchantments** (treasure, tradeable, on random loot; supported by
+  spyglasses, applied at an anvil): Far Sight doubles far view and survey
+  range; Revealing makes living things within 160 blocks and a few degrees of
+  the line of sight glow for the one looking (sent as entity data to that
+  player only, so vanilla clients see it too). Structure outlines are left for
+  later.
+- **Wayfinding** needs no enchantment: a compass in the other hand while scoping
+  points out the nearest biome missing from the holder's Adventuring Time, in
+  the action bar, searched off the main thread within 3,200 blocks and again
+  after moving 128 blocks or half a minute.
+
+### Built: glow, terrain borders, framed painting and the reworked desk
+
+From the second round of playtesting, and where it differs from the plan above:
+
+- **Cave maps draw what you see.** No fixed level: around its holder, a cave map
+  draws each column at their head height (rock in its darkest shade, or the
+  floor below in a shade by its drop) if the holder can see it, by a line of
+  sight from their eyes. The echo still hears through rock, at the ringer's
+  level. Old cave maps work the same way.
+- **The echo** rings with the trident's thunder under the amethyst chime, and
+  sends a ring of sparks (souls for an echo shard).
+- **The spyglass** fills a small patch around each spot it sees, so maps fill
+  in fast, in blobs; zooming plays the spyglass's own extend and fold sounds.
+- **Drawings:** a blank canvas, from an empty map or paper, comes out named
+  "Drawing".
+- **Glow ink is emissive.** Players with the mod see glow ink drawn a second
+  time over framed and held maps at full brightness, so it shines at night.
+  Labels and icons glow when clicked with a glow ink sac in the second slot
+  (paying their cost in glow ink): full brightness, glowing labels outlined in
+  their darker shade as glowing sign text is.
+- **Terrain borders.** A post's reach is spent by the land: open ground costs
+  1 per block, sand 1.2, snow 1.6, forest 1.8, rock 2.4, others 1.4, and slopes
+  (the map's lighter and darker shades) 1.3 times as much. Land a single nation
+  surrounds on every side, not touching the map's edge and no bigger than 4,096
+  pixels, becomes that nation's.
+- **Foresight** is worked out every 4 ticks rather than every frame: one square
+  per block within 32 blocks whose map pixel has ink, at that block's own ground
+  height, lifted 0.07 over it. Labels and pillars as before.
+- **Framed painting** as planned, simplified: a feather or brush in one hand and
+  ink in the other, use a map in a frame on a wall to paint it instead of
+  turning it (`framePainting`). Held use repeats, and dabs within 8 ticks on the
+  same frame are joined into a line; sneaking lays a half coat. Needs build
+  rights and no spawn protection; fixed frames and sealed maps refuse. Not yet:
+  maps on floors and ceilings, the 10-tick lockout of other uses, and the
+  painting-session log line.
+- **The desk:** hints, the label's size and keys, and the ink's strength show
+  under the window, never over the map; a palette column beside the map has a
+  swatch per dye, glow ink and water, faded when you have none, outlined when
+  loaded, and clicking one Shift-moves it into the second slot (and what was
+  there back out) without touching the tool on the cursor; the right button
+  erases with any drawing tool, for free; Shift keeps lines at right angles or
+  diagonal and boxes square, and Shift-clicking with the pen draws on from the
+  last stroke's end; pens scratch, fills splash, water pours and glow ink
+  glimmers. The desk is 8 pixels wider.
+
+### Built: walking the bounds, maps that know nations, and sketchbooks
+
+From the third round of playtesting: "wear the banner while surveying, and
+when you place it, it claims the portion you annexed"; maps shouldn't mark
+turfs by default; and the sketchbook.
+
+**Walking the bounds** (after the old custom of beating the bounds, when a
+parish walked its boundary every year). Since turned off by default behind
+`walkingBounds` (which replaced `wearableBanners`), until it's reworked: with
+it off, banners aren't worn, marches aren't followed and planting claims
+nothing; named banners are still posts.
+- Banners can be worn on the head, as raid captains wear them: every banner
+  item gets vanilla's `equippable` component
+  for the head, swappable (use it in the air to put it on) but not dispensed
+  onto entities, so dispensers still drop banners as before. Players without
+  the mod can wear them too; their client just doesn't predict it.
+- A worn named banner remembers its wearer's trail in its `custom_data`
+  (`mapplus:bounds`): a point every 4 blocks walked, up to `boundsLength`
+  blocks (2,048). A jump of more than 96 blocks (a teleport, a portal) breaks
+  the march off, and it starts again there; renaming the banner starts over.
+- The bounds close when the march comes back within 8 blocks of where it
+  began, after at least 32 blocks, or when a march that began in the nation's
+  own land leaves it and comes back in. The cartographer's work sound plays
+  and the action bar says so.
+- While marching with a map in hand (or coming back to the start), the action
+  bar shows the distance walked and the distance back to the start. The trail
+  shows on the wearer's held map as a dashed line in the banner's color, for
+  players without the mod too.
+- Planted, the banner claims its trail, 6 blocks wide, and everything the trail
+  closes in, together with the nation's own land: a flood fill from outside,
+  on 2-by-2-block cells, that the trail and the nation's land stop. Land another
+  nation holds (by claim, or within a post's reach) is never taken and doesn't
+  close anything in. An unclosed march claims only its trail. The town bell
+  rings, and the planter is told how much land was claimed.
+- The claim belongs to the post, kept with it in `nations.dat` as tiles of
+  cells. Take the banner down and its claim goes with it, as its reach does.
+- On maps, walked bounds are held first, oldest post first, whatever the land
+  (water included); then posts' reach floods out as before, crossing its own
+  nation's claims and stopping at anyone else's. "Entering …" counts claims
+  before reach.
+
+**Maps that know nations.** A map shows a nation's land only once the nation's
+banner is on it (`bordersNeedBanners`): marked by using the map on one of the
+nation's posts, which is vanilla's own way of putting a banner on a map, or
+pinned at the table with a banner of the same design. Borders are worked out
+with every nation, then the ones the map doesn't know are left out, so a known
+border still stops where a neighbor's land begins.
+
+**Sketchbooks**, as planned for the hand, with these differences:
+- Any book and quill, not just an atlas. A sketch fills the page's writing
+  area, 114 by 126 points, a pixel per point, where the text box sits.
+- Strokes go to the server as each ends (not on closing), so the ink is paid
+  from the other hand as it's used; the stroke shows at once, until the book
+  in hand comes back with it. The right button erases for free; Shift lays a
+  light coat. The quill's tip shows in the ink it would draw with.
+- Sketches are kept in the atlas data as page and deflated ink. Closing the
+  book keeps sketched pages even when they're the last ones; maps stitched in
+  later go after them. Sketched pages have no text box, show in the book
+  screens, on lecterns and facing a map, and are empty pages for players
+  without the mod.
+
+### Built: the drafting table
+
+As planned, with the table's one map slot kept as vanilla has it:
+
+- **The sheet is what the player carries.** The table still holds one map.
+  The maps the player carries (inventory and off hand) that border it, of the
+  same scale and dimension, lie around it: a sheet of three by three, worked
+  out by the server, which knows where maps are, and sent with the desk's
+  state, with which of them are sealed. Drawings (locked maps with nothing
+  explored) aren't anywhere, so they have no sheet.
+- **Zooming out** shows the sheet at a third of its size: the sheet button at
+  the end of the rack (a little three by three grid), or Ctrl and the wheel
+  over the map. The table's map is framed; the map under an empty hand lights
+  up.
+- **Drawing across:** the pen, brush, string, item frame and chain work in
+  sheet pixels (a map pixel each, three to a screen pixel at this size), and
+  each stroke is cut into the part on each map it crosses and sent to each
+  under one stroke number. The server accepts a stroke for a map on the
+  sheet as for the table's own, paid from the second slot. Pixels off the
+  sheet's maps, or on sealed ones, aren't drawn. Fills, labels, pins and
+  icons need one map: zoom in.
+- **Changing maps:** clicking a map on the sheet with an empty hand swaps it
+  onto the table through the off hand, with vanilla's own swap clicks, so the
+  table's map lands where the other one was and the off hand ends as it was.
+- Zooming is kept from table to table, as the ink's strength is.
+
+Also this round:
+
+- **Cave maps keep what they showed first.** A cave map only draws pixels it
+  hasn't drawn yet, so walking on at another level adds to it rather than
+  redrawing it at the new level, as a map of the surface keeps what it has
+  explored. The echo fills in only blanks too.
+- **Foresight knows where the map is.** Vanilla never tells the game where a
+  map lies: its copy of a map draws as if centered on the world's middle. So
+  Foresight laid every map there, and showed nothing anywhere else (it seemed
+  to work in flat worlds, which start in the middle). The server now tells
+  players with the mod where each map they're sent lies, once per map, and
+  Foresight lays the map there. It fades out over the last 8 blocks of its
+  reach. Players without the mod don't see Foresight at all; that's settled
+  rather than planned around.
+- **Sketches under writing.** A sketch can go on any page that isn't a map's,
+  written on or not: it lies under the text, which stays editable. With ink
+  in the other hand a click draws; without, it places the text cursor.
+- **Whole stacks at the rack.** 26.3 numbers the mouse's left button 1, but
+  container clicks still count a left click as 0; the rack and palette sent 1,
+  a right click, so picking up a stack of string or chain took half of it and
+  putting it back put down one. They send a left click now.
+
+### Built: tints and icons
+
+From playtesting on a server, and where it differs from the plan above:
+
+- **Typing labels works with a real keyboard.** Since 26.x, keyboard text only
+  reaches the game while text input is on, as it is for a focused text box; the
+  desk turns it on while a label is typed. (Tests type straight into the screen,
+  which is why they passed.) While typing, the label's size shows under it, and
+  ↑ ↓ size it as scrolling does.
+- **Strength is scrolled, not Shift.** Scrolling over the map with a drawing
+  tool picks full, ¾, ½ or ¼; a tooltip says which, and the preview under the
+  cursor shows it. It's kept from table to table. A stroke sets pixels to that
+  strength: over ink of the same color it only ever makes it stronger, over
+  another color it recolors at that strength. With water, full erases and any
+  lower strength fades a step. Watered dye costs that share of a pixel's ink.
+- **True tints for players with the mod.** The server leaves watered ink out of
+  the pixels it sends them and sends it on its own (`MapTintsPayload`,
+  compressed, when the ink changes); their game blends it over the map's colors
+  when it makes the map's picture, so terrain shows through in its own colors.
+  Players without the mod get the 2×2 pattern. Ink keeps the normal shade
+  (taking the terrain's shade is left for later).
+- **The bucket floods by color and strength,** so a tinted plot fills apart
+  from its border, and re-filling it at another strength changes the tint.
+- **Cauldron dips fade** ink, labels and icons a step; pins stay.
+- **Pottery sherds stamp icons:** the sherd's picture is cut out of its pot
+  texture (the pixels darker than the pot around them) and drawn in the dye's
+  color, named with the sherd's anvil name. Costs 8, 16 or 32 pixels of ink.
+  Counted with pins against `maxPinsPerMap`. A ninth rack slot; the desk is 16
+  pixels wider.
+- **Pins show their banner:** the front of the banner's flag, with its
+  patterns, made from the game's own textures (so resource packs apply).
+- **Sizes:** scroll over a mark with its tool to size it. Growing a label or
+  icon costs the difference, in its own ink; shrinking is free.
+- **Players with the mod draw all marks themselves;** the server no longer sends
+  them pins as vanilla markers. Players without the mod see every mark as a
+  named banner marker.
+- **Paper is a blank canvas,** like an empty map.
 
 ### Built: the planning desk
 
@@ -709,6 +1009,45 @@ Fabric split client/common source sets plus the Fabric API.
 7. Enchantment and in-world projection; vanilla client fallbacks
 8. Client-only mode, PNG export, uninstall command
 
+## Built: nations, caves, the echo, the spyglass and Foresight
+
+Where the build differs from the plans below:
+
+- **Nations come from banners alone.** Only a *named* banner put up in the world
+  is a border post, so decorative banners don't claim land. A nation is a banner
+  design (base color and patterns); its name is the name on its most recent
+  post. A post holds land out to `postReach` (48) blocks. On each map, land
+  floods out from the posts over the map's own pixels: costs grow with distance
+  (diagonals cost more), so neighbors meet halfway, and water pixels and
+  unexplored ones stop the flood. Every map shows it, not a separate political
+  map: borders in the nation's dark shade, the land inside as the faintest tint
+  (blended for players with the mod, a sparse pattern for the rest). Maps are
+  sent again whole when their territory changes. Posts whose banner is gone are
+  taken down when their chunk is loaded. Claimed (drawn) borders, contested
+  hatching and the political map are left for later.
+- **"Entering …"** is worked out from the nearest post in reach, straight-line,
+  every half second; "Leaving …" when there's none.
+- **Cave maps** are made by using an empty map with at least 8 blocks of rock or
+  soil overhead (leaves don't count); the map is named "Cave Map (Y …)". It shows
+  a floor plan: the block at that level in its darkest shade if solid, else the
+  floor below in a shade by how far it drops. It fills within `caveMapReach`
+  blocks while its holder is within 12 blocks of its level. Locking and zooming
+  keep the level. The Nether maps well this way.
+- **The echo** is the planned amethyst resonance: an amethyst shard (not used
+  up, with a cooldown) rings and fills the map in a circle at once, through
+  rock; an echo shard reaches twice as far.
+- **Spyglass:** zoom is scrolling while scoping (¼ to 2½ times vanilla's view);
+  the map in the other hand shows in the top right corner while scoping. Far
+  view and the spyglass enchantments are left for later.
+- **Foresight** is a data-driven enchantment (helmets, one level, treasure,
+  tradeable, on random loot), so vanilla players can join and carry it. The
+  projection is client-side only, for players with the mod: ink within 40
+  blocks as see-through squares on the ground (fainter for watered ink), labels
+  written flat on the ground, pins and icons as pillars of light. Players with
+  the mod are now sent a map's whole ink and territory for it. The vanilla
+  display-entity fallback and the uninstall datapack are left for later. Cave
+  maps project onto the surface for now.
+
 ## Future versions
 
 ### Territory and nations
@@ -765,9 +1104,9 @@ original leads". Kept out of the main mod; may become a parallel variant.
 
 ## Decisions
 
-- A map is consumed when stitched into an atlas. (Planned: it can be cut back
-  out with shears at the table while the atlas is unsigned; signing makes its
-  maps permanent.)
+- A map is consumed when stitched into an atlas, and can be cut back out with
+  shears at the table while the atlas is unsigned; signing makes its maps
+  permanent.
 - Drawing uses ink and dyes.
 - Client-only mode comes later.
 - In-world projection requires a helmet enchanted with Foresight, and the map
@@ -781,12 +1120,17 @@ original leads". Kept out of the main mod; may become a parallel variant.
   of buttons.
 - Framed maps can be painted where they hang (planned), but only freehand: fill,
   box, sealing, stitching and canvases stay at the table.
-- Watered-down ink is a fixed checkerboard pattern, never a blended color.
+- Watered-down ink is blended over the map by players with the mod, and shown
+  as a fixed pattern of ink and map to players without it: everyone sees a tint,
+  and nobody sees a hue that isn't there.
+- A water cauldron waters a map down a step per dip; four dips wash full ink off.
+- Framed-map painting is on by default and open to players without the mod.
+- Paper is a blank canvas at the table, as an empty map is.
 - Text on maps is stored as text (labels), written with a sign.
 - Sketches are page drawings in the book, never maps.
 - Foresight is treasure-only.
-- v1 spyglass: map surveying only. Far view, zoom control and spyglass
-  enchantments come later.
+- Spyglass: surveying, zoom, far view (map-style), Far Sight, Revealing and
+  wayfinding are built; real-chunk far view and structure outlines come later.
 - Spyglass chunk generation: on by default, server setting to turn it off.
 - Territory is visual only (future version); the political view is its own
   kind of map.
@@ -800,11 +1144,10 @@ original leads". Kept out of the main mod; may become a parallel variant.
 - Should seals be owned, so only the sealer, the map's maker or an operator can
   scrape them off? Planned: yes (`sealsAreOwned`), unlike vanilla wax, because a
   copy of a map reaches every other copy and a sign never does.
-- A cauldron dip waters a map down one step instead of washing it clean in one
-  go. Planned: yes, four dips to clean.
-- Framed-map painting on by default, and open to players without the mod?
-  Planned: yes to both.
-- Sketch size (60×60) and cap (16 pages per book).
+- Sketch cap (16 pages per book, `sketchPages`). Size: decided, the page's own
+  writing area, as a vanilla book lays it out (see Sketches).
+- Should a planted banner's claim outlive the banner, as OpenFront's land does?
+  Built: no, the claim goes with the post, so a flag must stand to hold land.
 
 ## To verify on 26.3
 

@@ -2,16 +2,29 @@ package com.assilf.mapplus.client;
 
 import com.assilf.mapplus.MapPlus;
 import com.assilf.mapplus.client.atlas.AtlasBookScreen;
+import com.assilf.mapplus.client.atlas.SketchBookScreen;
+import com.assilf.mapplus.client.atlas.SketchPad;
 import com.assilf.mapplus.client.desk.DeskState;
 import com.assilf.mapplus.client.desk.DeskWing;
+import com.assilf.mapplus.client.foresight.MapPlaces;
+import com.assilf.mapplus.client.frame.FramePainter;
+import com.assilf.mapplus.client.foresight.Projection;
+import com.assilf.mapplus.client.ink.ClientInk;
 import com.assilf.mapplus.client.marks.ClientMarks;
+import com.assilf.mapplus.client.marks.MarkIcons;
 import com.assilf.mapplus.client.mixin.AbstractContainerScreenAccessor;
+import com.assilf.mapplus.client.atlas.LecternView;
+import com.assilf.mapplus.client.atlas.OpenBook;
+import com.assilf.mapplus.client.scope.FarLand;
+import com.assilf.mapplus.client.scope.ScopeMap;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.net.AtlasPagePayload;
 import com.assilf.mapplus.net.InkLayerPayload;
 import com.assilf.mapplus.net.InkStatePayload;
 import com.assilf.mapplus.net.InkStrokePayload;
 import com.assilf.mapplus.net.MapMarksPayload;
+import com.assilf.mapplus.net.MapInkPayload;
+import com.assilf.mapplus.net.MapPlacePayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -41,7 +54,22 @@ public class MapPlusClient implements ClientModInitializer {
 		});
 		ClientPlayNetworking.registerGlobalReceiver(InkLayerPayload.TYPE, (payload, context) -> DeskState.accept(payload));
 		ClientPlayNetworking.registerGlobalReceiver(MapMarksPayload.TYPE, (payload, context) -> ClientMarks.accept(payload));
-		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientMarks.clear());
+		ClientPlayNetworking.registerGlobalReceiver(MapInkPayload.TYPE, (payload, context) -> ClientInk.accept(payload));
+		ClientPlayNetworking.registerGlobalReceiver(MapPlacePayload.TYPE, (payload, context) -> MapPlaces.accept(payload));
+		ScopeMap.register();
+		FarLand.register();
+		LecternView.register();
+		FramePainter.register();
+		Projection.register();
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+			ClientMarks.clear();
+			MapPlaces.clear();
+			// Textures are released on the game's own thread; made again on the next server, from the resource packs in use then.
+			client.execute(() -> {
+				ClientInk.clear();
+				MarkIcons.clear();
+			});
+		});
 
 		// The table window widens for the drawing desk before vanilla lays it out.
 		ScreenEvents.BEFORE_INIT.register((client, screen, width, height) -> {
@@ -58,7 +86,20 @@ public class MapPlusClient implements ClientModInitializer {
 			if (screen instanceof AtlasBookScreen book) {
 				ScreenEvents.remove(screen).register(closed -> leftOpen(book));
 			}
+			if (screen instanceof SketchBookScreen book && book.mapplus$sketchPad() != null) {
+				attachSketchPad(screen, book.mapplus$sketchPad());
+			}
 		});
+	}
+
+	private static void attachSketchPad(Screen screen, SketchPad pad) {
+		ScreenEvents.afterBackground(screen).register((s, graphics, mouseX, mouseY, delta) -> pad.extract(graphics, mouseX, mouseY));
+		ScreenEvents.afterTick(screen).register(s -> pad.tick());
+		ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> !pad.mouseClicked(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseDrag(screen).register((s, event, dx, dy) -> !pad.mouseDragged(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseRelease(screen).register((s, event) -> !pad.mouseReleased(event.x(), event.y(), event.button()));
+		ScreenMouseEvents.allowMouseScroll(screen).register((s, mouseX, mouseY, horizontal, vertical) -> !pad.mouseScrolled(mouseX, mouseY, vertical));
+		ScreenEvents.remove(screen).register(s -> pad.finish());
 	}
 
 	private static void attachDesk(CartographyTableScreen table) {
@@ -100,6 +141,9 @@ public class MapPlusClient implements ClientModInitializer {
 
 	/** A held atlas explores with the map it was closed on. */
 	private static void leftOpen(AtlasBookScreen book) {
+		if (!(book instanceof net.minecraft.client.gui.screens.inventory.LecternScreen)) {
+			OpenBook.readAt(book.mapplus$atlasPage());
+		}
 		InteractionHand hand = book.mapplus$atlasHand();
 		if (hand != null && ClientPlayNetworking.canSend(AtlasPagePayload.TYPE)) {
 			ClientPlayNetworking.send(new AtlasPagePayload(hand == InteractionHand.OFF_HAND, book.mapplus$atlasPage()));

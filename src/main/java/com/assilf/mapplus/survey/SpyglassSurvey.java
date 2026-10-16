@@ -33,6 +33,8 @@ import java.util.UUID;
  */
 public final class SpyglassSurvey {
 	/** Half-angle of the surveyed cone, close to the spyglass's field of view. */
+	/** How far around each sighted spot the map fills in, in pixels. */
+	private static final int BLOB = 2;
 	private static final double CONE_HALF_ANGLE = Math.toRadians(4.0);
 	private static final double GOLDEN_ANGLE = Math.PI * (3.0 - Math.sqrt(5.0));
 	private static final int SPIRAL_POINTS = 512;
@@ -79,7 +81,7 @@ public final class SpyglassSurvey {
 			return;
 		}
 
-		double range = server.getPlayerList().getViewDistance() * 16.0 * config.surveyRangeMultiplier;
+		double range = server.getPlayerList().getViewDistance() * 16.0 * config.surveyRangeMultiplier * FarView.reach(player);
 		int scale = MapPixels.scaleBlocks(map);
 		double step = Math.max(1.0, scale / 2.0);
 		Vec3 eye = player.getEyePosition();
@@ -119,7 +121,16 @@ public final class SpyglassSurvey {
 					break;
 				}
 				if (p.y <= chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z) + 1) {
-					fillPixel(level, loaded, map, MapPixels.pixelX(map, x), MapPixels.pixelZ(map, z));
+					// Each sighting fills a small patch around it, so the map fills in fast, in blobs.
+					int px = MapPixels.pixelX(map, x);
+					int pz = MapPixels.pixelZ(map, z);
+					for (int dz = -BLOB; dz <= BLOB; dz++) {
+						for (int dx = -BLOB; dx <= BLOB; dx++) {
+							if (dx * dx + dz * dz <= BLOB * BLOB + 1) {
+								fillPixel(level, loaded, map, px + dx, pz + dz);
+							}
+						}
+					}
 					break;
 				}
 			}

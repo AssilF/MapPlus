@@ -49,14 +49,38 @@ public record InkMaterial(Kind kind, DyeColor dye) {
 		return of(stack) != null || stack.is(Items.HONEYCOMB) || stack.is(ItemTags.AXES);
 	}
 
-	/** What an ink pixel becomes under this material. Returns the pixel itself where nothing changes. */
+	/** What an ink pixel becomes under this material at full strength. */
 	public byte apply(byte ink) {
+		return apply(ink, Ink.FULL);
+	}
+
+	/**
+	 * What an ink pixel becomes under this material, used at a strength. Returns
+	 * the pixel itself where nothing changes.
+	 * <ul>
+	 * <li>a dye colors the pixel at that strength; over its own color it only
+	 * ever makes the ink stronger, since only water makes ink fainter</li>
+	 * <li>glow ink makes ink glow, at the strength it has</li>
+	 * <li>water at full strength erases; watered down, it fades ink one step</li>
+	 * </ul>
+	 */
+	public byte apply(byte ink, int strength) {
+		boolean present = Ink.isPresent(ink);
 		return switch (kind) {
 			// Re-coloring keeps the glow, as dyeing a glowing sign does.
-			case DYE -> Ink.encode(dye, Ink.isPresent(ink) && Ink.isGlow(ink));
-			case GLOW -> Ink.isPresent(ink) ? Ink.encode(Ink.dye(ink), true) : ink;
-			case WATER -> Ink.NONE;
+			case DYE -> Ink.encode(dye, present && Ink.isGlow(ink),
+					present && Ink.dye(ink) == dye ? Math.min(Ink.strength(ink), strength) : strength);
+			case GLOW -> present ? Ink.encode(Ink.dye(ink), true, Ink.strength(ink)) : ink;
+			case WATER -> strength == Ink.FULL ? Ink.NONE : Ink.fade(ink);
 		};
+	}
+
+	/**
+	 * What changing one pixel costs, in quarters of a pixel's worth: watered
+	 * down dye goes further, while glow ink and water cost a whole pixel's worth.
+	 */
+	public int quarters(int strength) {
+		return kind == Kind.DYE ? 4 - Ink.clampStrength(strength) : 4;
 	}
 
 	/** Pixels one item of this material covers. */

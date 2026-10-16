@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 /**
  * On a drawing desk the second slot also takes what draws (dyes, ink sacs, glow
  * ink sacs, water bottles), what seals (honeycomb, axes) and what binds (book
- * and quill).
+ * and quill) or cuts a map out of an atlas (shears).
  */
 @Mixin(targets = "net.minecraft.world.inventory.CartographyTableMenu$4")
 public abstract class CartographyAdditionalSlotMixin implements DeskSlot {
@@ -30,6 +30,6 @@ public abstract class CartographyAdditionalSlotMixin implements DeskSlot {
 		if (original || mapplus$desk == null || !mapplus$desk.mapplus$isDesk()) {
 			return original;
 		}
-		return stack.is(Items.WRITABLE_BOOK) || InkMaterial.fitsTable(stack);
+		return stack.is(Items.WRITABLE_BOOK) || stack.is(Items.SHEARS) || InkMaterial.fitsTable(stack);
 	}
 }

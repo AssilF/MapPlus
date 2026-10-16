@@ -107,18 +107,52 @@ public final class InkLayer {
 		return !sealed && marks.isEmpty() && isEmpty();
 	}
 
-	/** Erases all ink, labels included. Pins stay: they're banners, not ink. */
+	/** Erases all ink, labels and icons included. Pins stay: they're banners, not ink. */
 	public void clear() {
 		Arrays.fill(pixels, Ink.NONE);
 		inkVersion++;
-		if (marks.removeIf(Mark::isLabel)) {
+		if (marks.removeIf(Mark::isInk)) {
 			marksVersion++;
 		}
 	}
 
-	/** Whether there's anything water would wash off: ink or labels. */
+	/**
+	 * Waters all ink down one step, labels and icons included; what was at its
+	 * faintest washes off. Pins stay: they're banners, not ink.
+	 */
+	public void fade() {
+		for (int i = 0; i < Ink.PIXELS; i++) {
+			set(i, Ink.fade(pixels[i]));
+		}
+		boolean changed = false;
+		for (int i = marks.size() - 1; i >= 0; i--) {
+			Mark mark = marks.get(i);
+			if (!mark.isInk()) {
+				continue;
+			}
+			if (mark.fade() >= Ink.FAINTEST) {
+				marks.remove(i);
+			} else {
+				marks.set(i, mark.withFade(mark.fade() + 1));
+			}
+			changed = true;
+		}
+		if (changed) {
+			marksVersion++;
+		}
+	}
+
+	/** Whether there's anything water would wash off: ink, labels or icons. */
 	public boolean hasInk() {
-		return !isEmpty() || countMarks(Mark.Kind.LABEL) > 0;
+		if (!isEmpty()) {
+			return true;
+		}
+		for (Mark mark : marks) {
+			if (mark.isInk()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public List<Mark> marks() {
@@ -178,13 +212,19 @@ public final class InkLayer {
 	}
 
 	/**
-	 * Draws this layer over a rectangle of map colors, in place.
+	 * Draws this layer over a rectangle of map colors, in place. Watered down
+	 * ink is drawn as a pattern for players who can only be sent map colors, and
+	 * left out for players with the mod, who blend it in themselves.
 	 */
-	public void overlay(int startX, int startY, int width, int height, byte[] colors) {
+	public void overlay(int startX, int startY, int width, int height, byte[] colors, boolean tintsAsPattern) {
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				byte ink = pixels[(startX + x) + (startY + y) * Ink.SIZE];
-				if (Ink.isPresent(ink)) {
+				if (!Ink.isPresent(ink)) {
+					continue;
+				}
+				int strength = Ink.strength(ink);
+				if (strength == Ink.FULL || tintsAsPattern && Ink.showsAt(strength, startX + x, startY + y)) {
 					colors[x + y * width] = Ink.toMapColor(ink);
 				}
 			}

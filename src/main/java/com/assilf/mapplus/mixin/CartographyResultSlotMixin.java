@@ -1,5 +1,6 @@
 package com.assilf.mapplus.mixin;
 
+import com.assilf.mapplus.atlas.Atlas;
 import com.assilf.mapplus.ink.DrawingDesk;
 import com.assilf.mapplus.ink.InkData;
 import net.minecraft.core.component.DataComponents;
@@ -27,6 +28,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <li>a drawing on an empty map uses up only that map; its ink was paid while drawing</li>
  * <li>a sealed map uses up the map and the honeycomb, as vanilla does</li>
  * <li>an unsealed map uses up the map and damages the axe instead of using it up</li>
+ * <li>a map cut out of an atlas leaves the atlas on the table without it, and wears the shears</li>
  * </ul>
  * The seal changes before the inputs do, so the next result already sees it.
  */
@@ -43,11 +45,31 @@ public abstract class CartographyResultSlotMixin {
 		ItemStack additional = additionalSlot.getItem();
 		Slot self = (Slot) (Object) this;
 
-		if (input.is(Items.MAP)) {
+		if (DrawingDesk.isBlankCanvas(input)) {
 			// Forget the canvas first, so the result doesn't come back when the map is used up.
 			DrawingDesk.of(menu).mapplus$setCanvas(null);
 			mapSlot.remove(1);
 			mapplus$playSound(player, SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT);
+			self.setChanged();
+			ci.cancel();
+			return;
+		}
+
+		if (Atlas.canCut(input) && additional.is(Items.SHEARS)) {
+			// The map comes out of the atlas in place; the shears take a little wear. Only the server cuts.
+			if (player.level() instanceof ServerLevel level) {
+				MapId cut = taken.get(DataComponents.MAP_ID);
+				if (cut == null || !Atlas.cut(input, cut, level.registryAccess())) {
+					taken.setCount(0);
+				} else {
+					additional.hurtAndBreak(1, level, player instanceof ServerPlayer serverPlayer ? serverPlayer : null, item -> {
+					});
+				}
+				DrawingDesk.of(menu).mapplus$cutDone();
+			}
+			mapSlot.setChanged();
+			additionalSlot.setChanged();
+			mapplus$playSound(player, SoundEvents.SHEEP_SHEAR);
 			self.setChanged();
 			ci.cancel();
 			return;

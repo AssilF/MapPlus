@@ -5,35 +5,50 @@ import com.assilf.mapplus.ink.Ink;
 import java.util.BitSet;
 import java.util.function.IntPredicate;
 
-/** The pixels each drawing tool covers on a 128 by 128 map. */
+/**
+ * The pixels each drawing tool covers on a 128 by 128 map, or on a square
+ * sheet of maps {@code width} pixels across.
+ */
 public final class Strokes {
 	private Strokes() {
 	}
 
 	public static boolean inside(int x, int y) {
-		return x >= 0 && y >= 0 && x < Ink.SIZE && y < Ink.SIZE;
+		return inside(x, y, Ink.SIZE);
+	}
+
+	public static boolean inside(int x, int y, int width) {
+		return x >= 0 && y >= 0 && x < width && y < width;
 	}
 
 	/** A square brush: one pixel, two by two, or three by three around the point. */
 	public static void dab(BitSet out, int x, int y, int size) {
+		dab(out, x, y, size, Ink.SIZE);
+	}
+
+	public static void dab(BitSet out, int x, int y, int size, int width) {
 		int from = -(size - 1) / 2;
 		for (int dy = from; dy < from + size; dy++) {
 			for (int dx = from; dx < from + size; dx++) {
-				if (inside(x + dx, y + dy)) {
-					out.set(x + dx + (y + dy) * Ink.SIZE);
+				if (inside(x + dx, y + dy, width)) {
+					out.set(x + dx + (y + dy) * width);
 				}
 			}
 		}
 	}
 
 	public static void line(BitSet out, int x0, int y0, int x1, int y1, int size) {
+		line(out, x0, y0, x1, y1, size, Ink.SIZE);
+	}
+
+	public static void line(BitSet out, int x0, int y0, int x1, int y1, int size, int width) {
 		int dx = Math.abs(x1 - x0);
 		int dy = -Math.abs(y1 - y0);
 		int sx = x0 < x1 ? 1 : -1;
 		int sy = y0 < y1 ? 1 : -1;
 		int error = dx + dy;
 		while (true) {
-			dab(out, x0, y0, size);
+			dab(out, x0, y0, size, width);
 			if (x0 == x1 && y0 == y1) {
 				return;
 			}
@@ -50,10 +65,14 @@ public final class Strokes {
 	}
 
 	public static void box(BitSet out, int x0, int y0, int x1, int y1, int size) {
-		line(out, x0, y0, x1, y0, size);
-		line(out, x1, y0, x1, y1, size);
-		line(out, x1, y1, x0, y1, size);
-		line(out, x0, y1, x0, y0, size);
+		box(out, x0, y0, x1, y1, size, Ink.SIZE);
+	}
+
+	public static void box(BitSet out, int x0, int y0, int x1, int y1, int size, int width) {
+		line(out, x0, y0, x1, y0, size, width);
+		line(out, x1, y0, x1, y1, size, width);
+		line(out, x1, y1, x0, y1, size, width);
+		line(out, x0, y1, x0, y0, size, width);
 	}
 
 	/**
@@ -61,6 +80,10 @@ public final class Strokes {
 	 * {@code off}, counted along the line.
 	 */
 	public static void dashed(BitSet out, int x0, int y0, int x1, int y1, int on, int off) {
+		dashed(out, x0, y0, x1, y1, on, off, Ink.SIZE);
+	}
+
+	public static void dashed(BitSet out, int x0, int y0, int x1, int y1, int on, int off, int width) {
 		int dx = Math.abs(x1 - x0);
 		int dy = -Math.abs(y1 - y0);
 		int sx = x0 < x1 ? 1 : -1;
@@ -68,8 +91,8 @@ public final class Strokes {
 		int error = dx + dy;
 		int step = 0;
 		while (true) {
-			if (step % (on + off) < on && inside(x0, y0)) {
-				out.set(x0 + y0 * Ink.SIZE);
+			if (step % (on + off) < on && inside(x0, y0, width)) {
+				out.set(x0 + y0 * width);
 			}
 			step++;
 			if (x0 == x1 && y0 == y1) {
@@ -165,7 +188,8 @@ public final class Strokes {
 		if (pending.get(pixel)) {
 			return -2;
 		}
-		return Ink.isPresent(ink[pixel]) ? Ink.dye(ink[pixel]).getId() : -1;
+		// Ink floods ink of its own color and strength, so a tinted zone fills apart from its border.
+		return Ink.isPresent(ink[pixel]) ? Ink.dye(ink[pixel]).getId() + 16 * Ink.strength(ink[pixel]) : -1;
 	}
 
 	private static int visit(BitSet out, IntPredicate passes, int pixel, int[] stack, int size) {

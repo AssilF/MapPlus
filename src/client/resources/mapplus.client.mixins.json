@@ -3,16 +3,22 @@
 	"package": "com.assilf.mapplus.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"AbstractClientPlayerMixin",
 		"AbstractContainerScreenAccessor",
 		"AbstractContainerScreenMixin",
 		"BookAccessMixin",
 		"BookEditScreenMixin",
 		"BookViewScreenMixin",
 		"CartographyTableScreenMixin",
+		"FirstPersonHandsMixin",
 		"GuiGraphicsExtractorMixin",
+		"LecternRenderStateMixin",
+		"LecternRendererMixin",
 		"LecternScreenMixin",
+		"MapInstanceMixin",
+		"MapRenderStateMixin",
 		"MapRendererMixin",
-		"MapRenderStateMixin"
+		"MouseHandlerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
